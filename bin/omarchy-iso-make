@@ -6,8 +6,17 @@ NO_CACHE=""
 KEEP_PKG_CACHE=""
 LOCAL_OMARCHY_PATH=""
 LOCAL_PKGS_PATH=""
+OMARCHY_ARCH="x86_64"
 while [[ $# -gt 0 ]]; do
   case $1 in
+  --arch)
+    OMARCHY_ARCH="${2:-}"
+    if [[ -z $OMARCHY_ARCH ]]; then
+      echo "Error: --arch requires an architecture" >&2
+      exit 1
+    fi
+    shift 2
+    ;;
   --no-cache)
     NO_CACHE=1
     shift
@@ -57,11 +66,16 @@ while [[ $# -gt 0 ]]; do
     ;;
   *)
     echo "Unknown option: $1"
-    echo "Usage: $0 [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>]"
+    echo "Usage: $0 [--arch x86_64] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>]"
     exit 1
     ;;
   esac
 done
+
+if [[ $OMARCHY_ARCH != "x86_64" ]]; then
+  echo "Error: unsupported architecture: $OMARCHY_ARCH (currently supported: x86_64)" >&2
+  exit 1
+fi
 
 if [[ -n $LOCAL_OMARCHY_PATH ]]; then
   [[ -d $LOCAL_OMARCHY_PATH ]] || { echo "Error: Omarchy checkout not found at $LOCAL_OMARCHY_PATH" >&2; exit 1; }
@@ -123,6 +137,7 @@ OMARCHY_MIRROR="${OMARCHY_MIRROR:-stable}"
 DOCKER_ARGS=(
   --rm
   --privileged
+  -e "OMARCHY_ARCH=$OMARCHY_ARCH"
   -e "OMARCHY_ISO_REF=$OMARCHY_ISO_REF"
   -e "OMARCHY_MIRROR=$OMARCHY_MIRROR"
   -e "OMARCHY_INSTALL_DEBUG=${OMARCHY_INSTALL_DEBUG:-}"
@@ -160,7 +175,7 @@ fi
 
 docker run "${DOCKER_ARGS[@]}" archlinux/archlinux:latest /$BUILD_SCRIPT
 
-latest_iso=$(\ls -t "$BUILD_RELEASE_PATH"/*.iso | head -n1)
+latest_iso=$(\ls -t "$BUILD_RELEASE_PATH"/*-"$OMARCHY_ARCH".iso | head -n1)
 iso_ref="${latest_iso%.*}-$OMARCHY_ISO_REF.iso"
 mv -f "$latest_iso" "$iso_ref"
 
