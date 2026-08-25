@@ -51,7 +51,7 @@ class ArmLimineTest(unittest.TestCase):
             target = Path(tmp)
             cmdline = phases_impl._prepare_arm_systemd_encryption(
                 SimpleNamespace(target=target),
-                "quiet cryptdevice=UUID=1234-abcd:root root=/dev/mapper/root "
+                "quiet console=ttyAMA0 cryptdevice=UUID=1234-abcd:root root=/dev/mapper/root "
                 "cryptkey=rootfs:/etc/omarchy/provisioning.key",
             )
             dropin = target / "etc/mkinitcpio.conf.d/90-omarchy-arm-encryption.conf"
@@ -79,8 +79,10 @@ class ArmLimineTest(unittest.TestCase):
         self.assertEqual(
             cmdline,
             "quiet rd.luks.name=1234-abcd=root root=/dev/mapper/root "
-            "rd.luks.key=/etc/omarchy/provisioning.key splash",
+            "rd.luks.key=/etc/omarchy/provisioning.key splash console=tty0 "
+            "plymouth.ignore-serial-consoles",
         )
+        self.assertNotIn("console=ttyAMA0", cmdline)
         self.assertEqual(
             crypttab,
             "root UUID=1234-abcd none luks,discard\n",

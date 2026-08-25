@@ -176,3 +176,24 @@ No new files unless we go the dual-list route on archinstall.packages or efiboot
 1. **mkarchiso on aarch64 is less-trodden ground.** It accepts `arch="aarch64"`, but the upstream Arch project doesn't dogfood it. Expect to file/patch around small bugs in archiso's helper scripts. Keep the archiso submodule pin tight so a regression doesn't surprise nightly.
 2. **Limine + LUKS + Btrfs + Snapper on aarch64** — every one of these works individually on ARM, but the combination is what omarchy ships. Worth one manual end-to-end pass before declaring done.
 3. **Apple T2 / linux-t2 / `arch-mact2` repo** are silently dropped on aarch64; users mistakenly trying to install the aarch64 ISO on a T2 Mac will get an obviously-wrong result. The configurator could refuse to install when arch mismatch is detected, but that's outside this plan.
+
+---
+
+## ARM64 VM encrypted-boot UX
+
+The M4/HVF acceptance run exposed generic QEMU `virt` behavior, not physical
+Apple-hardware behavior. With no explicit installed `console=`, QEMU firmware
+advertises the PL011 UART as stdout; Linux consequently selects `ttyAMA0` as
+`/dev/console`, and systemd's initramfs password agent can become the only
+visible LUKS prompt even after `virtio-gpu` initializes.
+
+For encrypted ARM64 installs, the generated UKI command line must select
+`console=tty0` and include `plymouth.ignore-serial-consoles`. The initramfs
+continues to use `systemd`, `kms`, `plymouth`, and `sd-encrypt`. The headless
+acceptance harness retains serial logging but enters the passphrase through
+the same emulated graphical keyboard used by an interactive QEMU window; no
+headless-only console parameter is persisted into the installed target.
+
+Acceptance requires both a fresh interactive graphical encrypted install and
+the automated encrypted headless path. Physical Apple-hardware acceptance is
+not implied or required by this VM-specific gate.
