@@ -1366,11 +1366,22 @@ preset="/etc/mkinitcpio.d/$kernel.preset"
 }
 
 # The preset and Limine defaults are root-owned shell configuration supplied
-# by signed packages or the installer.
+# by signed packages or the installer. limine-entry-tool uses a string-indexed
+# KERNEL_CMDLINE array, so declare it associative before sourcing the files.
 # shellcheck disable=SC1090
 source "$preset"
-# shellcheck disable=SC1091
-source /etc/default/limine
+declare -A KERNEL_CMDLINE=()
+set +u
+for config in \
+  /usr/share/limine-entry-tool.d/*.conf \
+  /etc/limine-entry-tool.conf \
+  /etc/limine-entry-tool.d/*.conf \
+  /etc/default/limine; do
+  [[ -f $config ]] || continue
+  # shellcheck disable=SC1090
+  source "$config"
+done
+set -u
 
 kernel_version="${ALL_kver:-}"
 [[ -n $kernel_version ]] || {
