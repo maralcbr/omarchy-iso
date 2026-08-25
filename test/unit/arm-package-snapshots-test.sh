@@ -130,4 +130,7 @@ if BUILDER_ROOT="$builder" PATH="$stubs:$PATH" \
   exit 1
 fi
 
+grep -Fq 'asahi-packages-candidate-[0-9a-f]{40}' "$ROOT/builder/fetch-arm-package-snapshots.sh"
+grep -Fq 'runtime_key="$builder_root/omarchy-arm-repository.asc"' "$ROOT/builder/fetch-arm-package-snapshots.sh"
+
 echo "ARM package snapshot tests passed"
