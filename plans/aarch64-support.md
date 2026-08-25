@@ -197,3 +197,43 @@ headless-only console parameter is persisted into the installed target.
 Acceptance requires both a fresh interactive graphical encrypted install and
 the automated encrypted headless path. Physical Apple-hardware acceptance is
 not implied or required by this VM-specific gate.
+
+### Acceptance evidence (2026-08-25 UTC)
+
+- Source commit: `c0f0afd2115b1d5b1220e16aeb95ee67132da7b6`.
+- Unpublished acceptance ISO:
+  `omarchy-2026.08.25-aarch64-quattro-c0f0afd.iso`, SHA-256
+  `a12358125785691069a9a869283c5d8bdd98b17eb7edc83c6a120a48c13c2550`.
+- Package input remained the exact published candidate
+  `asahi-packages-candidate-a9bf4e5da273af2d4b432b3e0b123f74f3c5b933`
+  with descriptor SHA-256
+  `d1638d35b816c4bbdedd2e3a3e60f08643df7952dc1c584e59ceeebffa132000`.
+  No package was rebuilt or substituted.
+- Builder: native aarch64 Lima VM on an M4 Pro, rootful Docker, 10 vCPUs and
+  24 GiB RAM. A rootless Docker attempt was rejected by Archiso's privileged
+  chroot mount and produced no ISO; the rootful rerun completed successfully.
+- Installed `/etc/kernel/cmdline` and `/proc/cmdline` both contained
+  `splash console=tty0 plymouth.ignore-serial-consoles`, with no
+  `console=ttyAMA0`. The installed initramfs retained the systemd hook set and
+  the generated drop-in inserted `plymouth` and `sd-encrypt`; Plymouth used
+  `Theme=omarchy`.
+- Graphical reboot: QEMU 11.1.0 with HVF, 10 vCPUs, 12 GiB RAM, UEFI,
+  `virtio-gpu-pci`, and the Cocoa display showed the Omarchy Plymouth lock and
+  password field. The passphrase entered through the emulated USB keyboard
+  unlocked the root disk and the same graphical window reached the Omarchy
+  desktop. Evidence is under
+  `armux-c0f0afd/graphical-reboot/frames/frame-20.png` and
+  `armux-c0f0afd/graphical-reboot/after-unlock-10s.png` on the M4 acceptance
+  host.
+- Serial remained log-only during the automated run. The installed kernel
+  reported `ttyAMA0 tty0` as active consoles and systemd retained its generated
+  serial getty fallback, but the unlock prompt was graphical and was not
+  diverted to serial.
+- Headless encrypted acceptance used the same fresh installed base and typed
+  the LUKS passphrase through QMP's graphical keyboard path. The complete PR
+  #51 acceptance suite passed in run `20260826-080106`; run
+  `20260826-075821` had one transient weather-data timeout and passed on the
+  unchanged rerun.
+
+This evidence covers generic ARM64 QEMU/HVF VM behavior only. It is not
+physical Apple-hardware acceptance, and the ISO remains unpublished.
