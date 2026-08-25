@@ -52,6 +52,8 @@ grep -Fq 'initrd /initramfs-linux.img' "$profile/grub/grub.cfg"
 grep -Fq 'kernel_images=("${pacstrap_dir}/boot/Image")' "$ROOT/builder/archiso-aarch64.patch"
 grep -Fq 'efiboot_files+=("${work_dir}/BOOT${uefi_arch[$arch]}.EFI")' \
   "$ROOT/builder/archiso-aarch64.patch"
+grep -Fq 'required_grubmodules=(configfile iso9660 linux normal search search_fs_uuid)' \
+  "$ROOT/builder/archiso-aarch64.patch"
 grep -Fq 'patch --forward --silent "${MKARCHISO[0]}" /builder/archiso-aarch64.patch' \
   "$ROOT/builder/build-iso.sh"
 
