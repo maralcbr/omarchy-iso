@@ -253,7 +253,8 @@ start_vm() {
       -device virtio-blk-pci,drive=drive0,bootindex=1 \
       -device virtio-gpu-pci \
       -display none \
-      -device qemu-xhci,id=xhci -device usb-tablet,bus=xhci.0 \
+      -device qemu-xhci,id=xhci \
+      -device usb-kbd,bus=xhci.0 -device usb-tablet,bus=xhci.0 \
       -netdev user,id=net0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22 \
       -device virtio-net-pci,netdev=net0 \
       -qmp "unix:$QMP_SOCK,server,nowait" \
