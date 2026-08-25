@@ -146,6 +146,7 @@ mkdir -p "$BASE_DIR" "$RUN_DIR"
 # Unix socket paths are capped at ~108 bytes, which a run directory nested in
 # test-runs/<iso-name>/runs/<timestamp> can exceed. Keep the socket in /tmp.
 QMP_SOCK="$(mktemp -u "${TMPDIR:-/tmp}/omarchy-iso-test-qmp.XXXXXX").sock"
+SERIAL_SOCK="$(mktemp -u "${TMPDIR:-/tmp}/omarchy-iso-test-serial.XXXXXX").sock"
 PIDFILE="$RUN_DIR/qemu.pid"
 
 log() {
@@ -231,7 +232,7 @@ cleanup() {
     stop_vm
   fi
 
-  rm -f "$RUN_DIR/.screen.ppm" "$RUN_DIR/.screen.png"
+  rm -f "$RUN_DIR/.screen.ppm" "$RUN_DIR/.screen.png" "$QMP_SOCK" "$SERIAL_SOCK"
   open_screenshots
 
   return $status
@@ -241,8 +242,10 @@ trap cleanup EXIT
 start_vm() {
   local disk="$1" serial="$2"
   shift 2
+  CURRENT_SERIAL_LOG="$serial"
 
   if [[ $GUEST_ARCH == "aarch64" ]]; then
+    rm -f "$SERIAL_SOCK"
     qemu-system-aarch64 \
       -cpu host -machine virt,accel=hvf \
       -smp "$CPUS" \
@@ -258,7 +261,8 @@ start_vm() {
       -netdev user,id=net0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22 \
       -device virtio-net-pci,netdev=net0 \
       -qmp "unix:$QMP_SOCK,server,nowait" \
-      -serial "file:$serial" \
+      -chardev "socket,id=serial0,path=$SERIAL_SOCK,server=on,wait=off,logfile=$serial,logappend=on" \
+      -serial chardev:serial0 \
       -pidfile "$PIDFILE" \
       -daemonize \
       "$@"
@@ -385,6 +389,20 @@ type_text() {
     esac
     sleep 0.05
   done
+}
+
+type_serial_line() {
+  printf '%s\r' "$1" |
+    "${TIMEOUT_COMMAND[@]}" socat -t 2 - "UNIX-CONNECT:$SERIAL_SOCK"
+}
+
+enter_luks_passphrase() {
+  if [[ $GUEST_ARCH == "aarch64" ]]; then
+    type_serial_line "$GUEST_PASSWORD"
+  else
+    type_text "$GUEST_PASSWORD"
+    press ret
+  fi
 }
 
 # --------------------------------------------------------------------- guest
@@ -911,18 +929,19 @@ unlock_luks() {
   capture_console "success-first-boot-01-luks-prompt"
 
   while true; do
-    type_text "$GUEST_PASSWORD"
+    enter_luks_passphrase
     if ((waited == 0)); then
       capture_console "success-first-boot-02-luks-passphrase"
     fi
-    press ret
     sleep 20
     ((waited += 30))
 
-    press ctrl-alt-f3
-    sleep 3
-    if ocr_screen | grep -qi "login:"; then
-      return 0
+    if [[ $GUEST_ARCH == "aarch64" ]]; then
+      grep -qi "login:" "$CURRENT_SERIAL_LOG" && return 0
+    else
+      press ctrl-alt-f3
+      sleep 3
+      ocr_screen | grep -qi "login:" && return 0
     fi
 
     if ((waited >= 300)); then
@@ -950,40 +969,48 @@ EOF
   (cd "$BASE_DIR/www" && exec python3 -m http.server "$HTTP_PORT" --bind 127.0.0.1 >/dev/null 2>&1) &
   HTTP_PID=$!
 
-  local waited=0
-  while true; do
-    press ctrl-alt-f3
-    sleep 4
-    ocr_screen | grep -qi "login:" && break
-    ((waited += 8))
+  if [[ $GUEST_ARCH == "aarch64" ]]; then
+    type_serial_line "$GUEST_USER"
+    sleep 2
+    type_serial_line "$GUEST_PASSWORD"
+    sleep 3
+    type_serial_line "curl -fsS http://10.0.2.2:$HTTP_PORT/bootstrap -o /tmp/bs && bash /tmp/bs"
+  else
+    local waited=0
+    while true; do
+      press ctrl-alt-f3
+      sleep 4
+      ocr_screen | grep -qi "login:" && break
+      ((waited += 8))
 
-    if ((waited >= 300)); then
-      capture_console "failure-first-boot-console-timeout"
-      echo "Timed out waiting for a console login prompt" >&2
-      return 1
-    fi
-    sleep 4
-  done
+      if ((waited >= 300)); then
+        capture_console "failure-first-boot-console-timeout"
+        echo "Timed out waiting for a console login prompt" >&2
+        return 1
+      fi
+      sleep 4
+    done
 
-  type_text "$GUEST_USER"
-  capture_console "success-first-boot-03-console-username"
-  press ret
-  wait_for_screen "Password" 60
-  type_text "$GUEST_PASSWORD"
-  capture_console "success-first-boot-04-console-password"
-  press ret
-  sleep 3
+    type_text "$GUEST_USER"
+    capture_console "success-first-boot-03-console-username"
+    press ret
+    wait_for_screen "Password" 60
+    type_text "$GUEST_PASSWORD"
+    capture_console "success-first-boot-04-console-password"
+    press ret
+    sleep 3
 
-  type_text "curl -fsS http://10.0.2.2:$HTTP_PORT/bootstrap -o /tmp/bs && bash /tmp/bs"
-  capture_console "success-first-boot-05-bootstrap-command"
-  press ret
+    type_text "curl -fsS http://10.0.2.2:$HTTP_PORT/bootstrap -o /tmp/bs && bash /tmp/bs"
+    capture_console "success-first-boot-05-bootstrap-command"
+    press ret
+  fi
 
   wait_for_ssh 360 "failure-first-boot-ssh-timeout"
   capture_console "success-first-boot-06-bootstrap-complete"
 
   kill "$HTTP_PID" 2>/dev/null || true
   HTTP_PID=""
-  press ctrl-alt-f1
+  [[ $GUEST_ARCH == "aarch64" ]] || press ctrl-alt-f1
 }
 
 # Get a freshly booted system to a running Hyprland session, typing at the
@@ -994,11 +1021,10 @@ establish_session() {
     sleep 10
     capture_console "success-session-01-luks-prompt"
     until ssh_guest true 2>/dev/null; do
-      type_text "$GUEST_PASSWORD"
+      enter_luks_passphrase
       if ((waited == 0)); then
         capture_console "success-session-02-luks-passphrase"
       fi
-      press ret
       sleep 15
       ((waited += 16))
 
