@@ -311,7 +311,7 @@ wait_for_screen() {
     fi
 
     if ((waited >= timeout)); then
-      slug=${text,,}
+      slug=$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')
       slug=${slug// /-}
       slug=${slug//[^a-z0-9-]/}
       capture_console "failure-installer-waiting-for-$slug"
@@ -346,7 +346,10 @@ type_text() {
     ch=${text:i:1}
     case "$ch" in
       [a-z0-9]) press "$ch" ;;
-      [A-Z]) press "shift-${ch,,}" ;;
+      [A-Z])
+        ch=$(printf '%s' "$ch" | tr '[:upper:]' '[:lower:]')
+        press "shift-$ch"
+        ;;
       " ") press spc ;;
       .) press dot ;;
       ,) press comma ;;
