@@ -20,18 +20,24 @@ airootfs_image_type="squashfs"
 # them in an outer stream saves little space but makes pacman decompress the
 # outer layer while hashing and extracting every package during installation.
 #
-# Everything else in the live root is zstd rather than xz. Squashfs decompresses
-# on the page-fault path through a single stream (CONFIG_SQUASHFS_DECOMP_SINGLE),
-# where xz manages ~100MB/s against zstd's ~900MB/s, and the live root is read
-# cold on every boot: kernel, plymouth, systemd, python, archinstall, gum. The
-# whole ISO grows well under a percent for it, and dropping the x86 BCJ filter
-# also removes one of the blockers listed in plans/aarch64-support.md.
-airootfs_image_tool_options=(
-  '-comp' 'zstd'
-  '-Xcompression-level' '19'
-  '-b' '1M'
-  '-action' 'uncompressed@subpathname(var/cache/omarchy/mirror/offline)'
-)
+# The generic aarch64 kernel currently enables SquashFS XZ but not Zstandard,
+# so ARM media must use XZ to remain bootable. Do not apply the x86 BCJ filter
+# there. x86_64 retains Zstandard for much faster cold reads of the live root.
+if [[ $arch == "aarch64" ]]; then
+  airootfs_image_tool_options=(
+    '-comp' 'xz'
+    '-b' '1M'
+    '-Xdict-size' '1M'
+    '-action' 'uncompressed@subpathname(var/cache/omarchy/mirror/offline)'
+  )
+else
+  airootfs_image_tool_options=(
+    '-comp' 'zstd'
+    '-Xcompression-level' '19'
+    '-b' '1M'
+    '-action' 'uncompressed@subpathname(var/cache/omarchy/mirror/offline)'
+  )
+fi
 bootstrap_tarball_compression=('zstd' '-c' '-T0' '--auto-threads=logical' '--long' '-19')
 file_permissions=(
   ["/etc/shadow"]="0:0:400"
