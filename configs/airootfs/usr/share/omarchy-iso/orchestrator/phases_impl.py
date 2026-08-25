@@ -126,6 +126,9 @@ EARLY_BOOTSTRAP_BASE_PACKAGES = [
     "base-devel",
     "git",
     "limine",
+    "limine-mkinitcpio-hook",
+    "limine-snapper-sync",
+    "snapper",
     "efibootmgr",
     "omarchy-keyring",
 ]
