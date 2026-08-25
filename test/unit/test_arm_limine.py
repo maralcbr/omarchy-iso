@@ -46,10 +46,14 @@ class ArmLimineTest(unittest.TestCase):
             inspect.getsource(phases_impl._install_arm_limine_updater),
         )
 
-    def test_arm_encryption_dropin_matches_classic_cryptdevice(self) -> None:
+    def test_arm_encryption_uses_systemd_hook_and_parameter(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp)
-            phases_impl._install_arm_encryption_hooks(SimpleNamespace(target=target))
+            cmdline = phases_impl._prepare_arm_systemd_encryption(
+                SimpleNamespace(target=target),
+                "quiet cryptdevice=UUID=1234-abcd:root root=/dev/mapper/root "
+                "cryptkey=rootfs:/etc/omarchy/provisioning.key",
+            )
             dropin = target / "etc/mkinitcpio.conf.d/90-omarchy-arm-encryption.conf"
             result = subprocess.run(
                 [
@@ -65,11 +69,21 @@ class ArmLimineTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
+            crypttab = (target / "etc/crypttab.initramfs").read_text()
 
         self.assertEqual(
             result.stdout.strip(),
-            "base udev autodetect microcode modconf kms keyboard keymap consolefont "
-            "block encrypt filesystems fsck",
+            "base systemd autodetect microcode modconf kms keyboard sd-vconsole "
+            "block sd-encrypt filesystems fsck",
+        )
+        self.assertEqual(
+            cmdline,
+            "quiet rd.luks.name=1234-abcd=root root=/dev/mapper/root "
+            "rd.luks.key=/etc/omarchy/provisioning.key",
+        )
+        self.assertEqual(
+            crypttab,
+            "root UUID=1234-abcd none luks,discard\n",
         )
 
     def test_bundled_templates_exist(self) -> None:
