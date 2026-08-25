@@ -6,11 +6,12 @@ destination=${1:?Usage: fetch-arm-package-snapshots.sh DESTINATION}
 builder_root=${BUILDER_ROOT:-/builder}
 source "$builder_root/arm-package-snapshots.conf"
 
-[[ $ARM_REPOSITORY_RELEASE =~ ^asahi-packages-stable-[0-9a-f]{40}$ ]]
+[[ $ARM_REPOSITORY_RELEASE =~ ^asahi-packages-(stable|candidate)-[0-9a-f]{40}$ ]]
 [[ $ARM_REPOSITORY_DESCRIPTOR_RELEASE =~ ^asahi-packages-candidate-[0-9a-f]{40}$ ]]
 [[ $ARM_REPOSITORY_DESCRIPTOR_SHA256 =~ ^[0-9a-f]{64}$ ]]
 [[ $ARM_REPOSITORY_SOURCE_COMMIT =~ ^[0-9a-f]{40}$ ]]
 [[ $ARM_REPOSITORY_SIGNING_FINGERPRINT =~ ^[A-F0-9]{40}$ ]]
+[[ $ARM_REPOSITORY_PACKAGE_COUNT =~ ^[1-9][0-9]*$ ]]
 [[ $ARM_RUNTIME_RELEASE =~ ^asahi-quattro-[0-9a-f]{8}$ ]]
 [[ $ARM_RUNTIME_MANIFEST_SHA256 =~ ^[0-9a-f]{64}$ ]]
 [[ $ARM_RUNTIME_SOURCE_COMMIT =~ ^[0-9a-f]{40}$ ]]
@@ -92,8 +93,8 @@ grep -Fxq 'channel=candidate' "$work/CANDIDATE"
 grep -Fxq "release_tag=$ARM_REPOSITORY_DESCRIPTOR_RELEASE" "$work/CANDIDATE"
 grep -Fxq "source_commit=$ARM_REPOSITORY_SOURCE_COMMIT" "$work/CANDIDATE"
 grep -Fxq "signing_fingerprint=$ARM_REPOSITORY_SIGNING_FINGERPRINT" "$work/CANDIDATE"
-grep -Fxq 'package_count=21' "$work/CANDIDATE"
-(( $(grep -c '^package=' "$work/CANDIDATE") == 21 ))
+grep -Fxq "package_count=$ARM_REPOSITORY_PACKAGE_COUNT" "$work/CANDIDATE"
+(( $(grep -c '^package=' "$work/CANDIDATE") == ARM_REPOSITORY_PACKAGE_COUNT ))
 
 while IFS= read -r record; do
   IFS='|' read -r _ _ _ _ _ _ _ signature_checksum <<<"$record"
@@ -125,4 +126,4 @@ install -m 0644 "$work/runtime.manifest" "$destination/ARM-RUNTIME"
   sed -n 's/^package=//p' "$work/CANDIDATE"
   sed -n 's/^package=//p' "$work/runtime.manifest"
 } | cut -d'|' -f5 >"$destination/ARM-PACKAGES"
-(( $(wc -l <"$destination/ARM-PACKAGES") == 27 ))
+(( $(wc -l <"$destination/ARM-PACKAGES") == ARM_REPOSITORY_PACKAGE_COUNT + 6 ))

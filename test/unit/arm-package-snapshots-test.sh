@@ -10,7 +10,7 @@ builder="$work/builder"
 remote="$work/remote"
 stubs="$work/stubs"
 destination="$work/destination"
-repository_release="asahi-packages-stable-$(printf 'a%.0s' {1..40})"
+repository_release="asahi-packages-candidate-$(printf 'b%.0s' {1..40})"
 descriptor_release="asahi-packages-candidate-$(printf 'b%.0s' {1..40})"
 runtime_release=asahi-quattro-1234abcd
 source_commit=$(printf 'c%.0s' {1..40})
@@ -27,10 +27,10 @@ channel=candidate
 release_tag=$descriptor_release
 source_commit=$source_commit
 signing_fingerprint=$fingerprint
-package_count=21
+package_count=31
 EOF
 
-for index in $(seq 1 21); do
+for index in $(seq 1 31); do
   package=$(printf 'repo-pkg-%02d' "$index")
   filename="$package-1-1-aarch64.pkg.tar.xz"
   signature="$filename.sig"
@@ -69,6 +69,7 @@ ARM_REPOSITORY_DESCRIPTOR_RELEASE=$descriptor_release
 ARM_REPOSITORY_DESCRIPTOR_SHA256=$(sha256sum "$repository_manifest" | cut -d' ' -f1)
 ARM_REPOSITORY_SOURCE_COMMIT=$source_commit
 ARM_REPOSITORY_SIGNING_FINGERPRINT=$fingerprint
+ARM_REPOSITORY_PACKAGE_COUNT=31
 ARM_RUNTIME_RELEASE=$runtime_release
 ARM_RUNTIME_MANIFEST_SHA256=$(sha256sum "$runtime_manifest" | cut -d' ' -f1)
 ARM_RUNTIME_SOURCE_COMMIT=$runtime_commit
@@ -115,9 +116,9 @@ BUILDER_ROOT="$builder" PATH="$stubs:$PATH" \
   bash "$ROOT/builder/fetch-arm-package-snapshots.sh" "$destination"
 
 package_count=$(find "$destination" -maxdepth 1 -type f -name '*.pkg.tar.*' ! -name '*.sig' | wc -l)
-(( package_count == 27 ))
+(( package_count == 37 ))
 [[ -f $destination/ARM-REPOSITORY && -f $destination/ARM-RUNTIME ]]
-(( $(wc -l <"$destination/ARM-PACKAGES") == 27 ))
+(( $(wc -l <"$destination/ARM-PACKAGES") == 37 ))
 
 printf 'corrupted\n' >>"$remote/$repository_release/repo-pkg-01-1-1-aarch64.pkg.tar.xz"
 if BUILDER_ROOT="$builder" PATH="$stubs:$PATH" \
