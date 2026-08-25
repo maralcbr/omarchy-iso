@@ -396,6 +396,25 @@ type_serial_line() {
     "${TIMEOUT_COMMAND[@]}" socat -t 2 - "UNIX-CONNECT:$SERIAL_SOCK"
 }
 
+wait_for_serial_since() {
+  local text="$1" offset="$2" timeout="$3" waited=0
+
+  while ! tail -c "+$((offset + 1))" "$CURRENT_SERIAL_LOG" | grep -Fqi "$text"; do
+    if ! vm_running; then
+      echo "VM exited while waiting for serial output: $text" >&2
+      return 1
+    fi
+
+    if ((waited >= timeout)); then
+      echo "Timed out after ${timeout}s waiting for serial output: $text" >&2
+      return 1
+    fi
+
+    sleep 1
+    ((waited += 1))
+  done
+}
+
 enter_luks_passphrase() {
   if [[ $GUEST_ARCH == "aarch64" ]]; then
     type_serial_line "$GUEST_PASSWORD"
@@ -970,10 +989,18 @@ EOF
   HTTP_PID=$!
 
   if [[ $GUEST_ARCH == "aarch64" ]]; then
-    type_serial_line "$GUEST_USER"
+    local serial_offset
+
+    # systemd can print the login prompt just before agetty is ready to read.
+    # Wait for the prompt to settle, then synchronize every subsequent input
+    # against output written after that input was sent.
     sleep 2
+    serial_offset=$(wc -c <"$CURRENT_SERIAL_LOG")
+    type_serial_line "$GUEST_USER"
+    wait_for_serial_since "Password:" "$serial_offset" 60
+    serial_offset=$(wc -c <"$CURRENT_SERIAL_LOG")
     type_serial_line "$GUEST_PASSWORD"
-    sleep 3
+    wait_for_serial_since "cwd=/home/$GUEST_USER" "$serial_offset" 60
     type_serial_line "curl -fsS http://10.0.2.2:$HTTP_PORT/bootstrap -o /tmp/bs && bash /tmp/bs"
   else
     local waited=0
