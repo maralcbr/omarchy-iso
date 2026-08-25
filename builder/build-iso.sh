@@ -58,6 +58,12 @@ pacman-key --populate "$DISTRO_KEYRING_NAME"
 # the container doesn't have yet.
 pacman --noconfirm -Syu "${BUILD_HOST_PACKAGES[@]}"
 
+if [[ $OMARCHY_ARCH == "aarch64" ]]; then
+  cp /archiso/archiso/mkarchiso "${MKARCHISO[0]}"
+  patch --forward --silent "${MKARCHISO[0]}" /builder/archiso-aarch64.patch
+  chmod +x "${MKARCHISO[0]}"
+fi
+
 # Pre-import the omarchy signing key (so pacman trusts our [omarchy] repo
 # during the build without keyserver lookups).
 if [[ $OMARCHY_ARCH == "aarch64" ]]; then

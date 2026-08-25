@@ -39,7 +39,7 @@ case "$OMARCHY_ARCH" in
       linux-aarch64 git gum jq openssl plymouth omarchy-keyring
       "$OMARCHY_SETTINGS_PACKAGE" lvm2 cryptsetup parted
     )
-    MKARCHISO=(/archiso/archiso/mkarchiso)
+    MKARCHISO=(/tmp/omarchy-mkarchiso-aarch64)
     ;;
   *)
     echo "Unsupported OMARCHY_ARCH: $OMARCHY_ARCH" >&2
@@ -79,6 +79,10 @@ prepare_archiso_profile() {
   rm -f \
     "$profile/airootfs/etc/mkinitcpio.d/linux.preset" \
     "$profile/airootfs/etc/mkinitcpio.d/linux-t2.preset"
+  sed -i \
+    -e 's/ microcode / /' \
+    -e 's/ memdisk / /' \
+    "$profile/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
   sed -i \
     -e 's/vmlinuz-linux-t2/Image/g' \
     -e 's/initramfs-linux-t2\.img/initramfs-linux.img/g' \
