@@ -1222,7 +1222,7 @@ def stage_provisioning_state(ctx: InstallContext) -> None:
 
 
 def _stage_node_tarball(ctx: InstallContext, provisioning_dir) -> None:
-    tarballs = sorted(NODE_PACKAGES_DIR.glob("node-v*-linux-x64.tar.gz"))
+    tarballs = sorted(NODE_PACKAGES_DIR.glob(_node_tarball_pattern()))
     if not tarballs:
         # Hard error on every install, not just deferred-provisioning installs: the stash is what lets a
         # later factory reset finalize the next owner offline, and an ISO
@@ -1238,6 +1238,15 @@ def _stage_node_tarball(ctx: InstallContext, provisioning_dir) -> None:
     if not target_tarball.exists():
         info("› stashing Node tarball for offline first-boot setup")
         shutil.copy2(tarballs[0], target_tarball)
+
+
+def _node_tarball_pattern(machine: str | None = None) -> str:
+    machine = (machine or os.uname().machine).lower()
+    if machine in {"aarch64", "arm64"}:
+        return "node-v*-linux-arm64.tar.gz"
+    if machine == "x86_64":
+        return "node-v*-linux-x64.tar.gz"
+    raise RuntimeError(f"Unsupported Node bundle architecture: {machine}")
 
 
 def _provision_install_encrypted(ctx: InstallContext) -> bool:
