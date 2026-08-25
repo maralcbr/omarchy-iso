@@ -1450,6 +1450,18 @@ def _prepare_arm_systemd_encryption(ctx: InstallContext, cmdline: str) -> str:
     )
     if not re.search(r"(?<!\S)splash(?!\S)", cmdline):
         cmdline += " splash"
+    # QEMU's ARM virt machine advertises its PL011 UART as firmware stdout.
+    # Without an explicit virtual console, Linux makes ttyAMA0 /dev/console
+    # and systemd's initramfs password agent becomes the only visible unlock
+    # prompt even when virtio-gpu and Plymouth are present. Make the graphical
+    # console authoritative for normal installed systems. The acceptance
+    # harness drives this display through QMP, so test-only serial wiring never
+    # needs to leak into the target command line.
+    cmdline = re.sub(r"(?<!\S)console=\S+", "", cmdline)
+    cmdline = re.sub(r"\s+", " ", cmdline).strip()
+    cmdline += " console=tty0"
+    if not re.search(r"(?<!\S)plymouth\.ignore-serial-consoles(?!\S)", cmdline):
+        cmdline += " plymouth.ignore-serial-consoles"
     return cmdline
 
 
@@ -1977,6 +1989,12 @@ def validate_boot(ctx: InstallContext) -> None:
         )
         if not encryption_hooks.exists() or "sd-encrypt" not in encryption_hooks.read_text():
             raise RuntimeError(f"Encrypted ARM install but {encryption_hooks} is missing")
+        if "console=tty0" not in limine_conf_text:
+            raise RuntimeError(f"Encrypted ARM install but {limine_conf} has no graphical console")
+        if "plymouth.ignore-serial-consoles" not in limine_conf_text:
+            raise RuntimeError(
+                f"Encrypted ARM install but {limine_conf} may suppress Plymouth for serial"
+            )
 
     kernel_cmdline = ctx.target / "etc" / "kernel" / "cmdline"
     if not kernel_cmdline.exists():
