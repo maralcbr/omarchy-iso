@@ -61,8 +61,17 @@ profile_values=$(
   export OMARCHY_ARCH=aarch64 SOURCE_DATE_EPOCH=0
   declare -A file_permissions=()
   source "$ROOT/configs/profiledef.sh"
-  printf '%s|%s\n' "$arch" "${bootmodes[*]}"
+  printf '%s|%s|%s\n' "$arch" "${bootmodes[*]}" "${airootfs_image_tool_options[*]}"
 )
-[[ $profile_values == "aarch64|uefi.grub" ]]
+[[ $profile_values == *"aarch64|uefi.grub|-comp xz "* ]]
+[[ $profile_values != *"zstd"* ]]
+
+x86_profile_values=$(
+  export OMARCHY_ARCH=x86_64 SOURCE_DATE_EPOCH=0
+  declare -A file_permissions=()
+  source "$ROOT/configs/profiledef.sh"
+  printf '%s\n' "${airootfs_image_tool_options[*]}"
+)
+[[ $x86_profile_values == *"-comp zstd "* ]]
 
 echo "ARM profile tests passed"
