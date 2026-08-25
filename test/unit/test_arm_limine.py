@@ -32,6 +32,24 @@ class ArmLimineTest(unittest.TestCase):
         self.assertIn("@@CMDLINE@@", (assets / "default.conf").read_text())
         self.assertIn("Omarchy Bootloader", (assets / "limine.conf").read_text())
 
+    def test_bootstrap_installs_arm_limine_integration(self) -> None:
+        self.assertTrue(
+            {
+                "limine",
+                "limine-mkinitcpio-hook",
+                "limine-snapper-sync",
+                "snapper",
+            }.issubset(phases_impl.EARLY_BOOTSTRAP_BASE_PACKAGES)
+        )
+
+    def test_offline_mirror_contains_arm_limine_integration(self) -> None:
+        packages = set((ROOT / "builder/archinstall.packages").read_text().splitlines())
+        self.assertTrue(
+            {"limine-mkinitcpio-hook", "limine-snapper-sync", "snapper"}.issubset(
+                packages
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
