@@ -74,12 +74,12 @@ class ArmLimineTest(unittest.TestCase):
         self.assertEqual(
             result.stdout.strip(),
             "base systemd autodetect microcode modconf kms keyboard sd-vconsole "
-            "block sd-encrypt filesystems fsck",
+            "block plymouth sd-encrypt filesystems fsck",
         )
         self.assertEqual(
             cmdline,
             "quiet rd.luks.name=1234-abcd=root root=/dev/mapper/root "
-            "rd.luks.key=/etc/omarchy/provisioning.key",
+            "rd.luks.key=/etc/omarchy/provisioning.key splash",
         )
         self.assertEqual(
             crypttab,
