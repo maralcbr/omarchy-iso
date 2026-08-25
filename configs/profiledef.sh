@@ -8,8 +8,12 @@ iso_application="Omarchy Installer"
 iso_version="$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
 install_dir="arch"
 buildmodes=('iso')
-bootmodes=('bios.syslinux' 'uefi.grub')
-arch="x86_64"
+arch="${OMARCHY_ARCH:-x86_64}"
+case "$arch" in
+  x86_64) bootmodes=('bios.syslinux' 'uefi.grub') ;;
+  aarch64) bootmodes=('uefi.grub') ;;
+  *) echo "Unsupported architecture: $arch" >&2; return 1 ;;
+esac
 pacman_conf="pacman-offline.conf"
 airootfs_image_type="squashfs"
 # Package archives in the offline mirror are already zstd-compressed. Storing

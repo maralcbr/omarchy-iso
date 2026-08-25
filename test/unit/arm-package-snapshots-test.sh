@@ -117,6 +117,7 @@ BUILDER_ROOT="$builder" PATH="$stubs:$PATH" \
 package_count=$(find "$destination" -maxdepth 1 -type f -name '*.pkg.tar.*' ! -name '*.sig' | wc -l)
 (( package_count == 27 ))
 [[ -f $destination/ARM-REPOSITORY && -f $destination/ARM-RUNTIME ]]
+(( $(wc -l <"$destination/ARM-PACKAGES") == 27 ))
 
 printf 'corrupted\n' >>"$remote/$repository_release/repo-pkg-01-1-1-aarch64.pkg.tar.xz"
 if BUILDER_ROOT="$builder" PATH="$stubs:$PATH" \
