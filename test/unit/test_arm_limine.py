@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import inspect
+import subprocess
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "configs/airootfs/usr/share/omarchy-iso"))
@@ -41,6 +44,32 @@ class ArmLimineTest(unittest.TestCase):
         self.assertIn(
             "Target = linux-aarch64",
             inspect.getsource(phases_impl._install_arm_limine_updater),
+        )
+
+    def test_arm_encryption_dropin_matches_classic_cryptdevice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            phases_impl._install_arm_encryption_hooks(SimpleNamespace(target=target))
+            dropin = target / "etc/mkinitcpio.conf.d/90-omarchy-arm-encryption.conf"
+            result = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    (
+                        "HOOKS=(base systemd autodetect microcode modconf kms keyboard "
+                        f"sd-vconsole block filesystems fsck); source '{dropin}'; "
+                        "printf '%s\\n' \"${HOOKS[*]}\""
+                    ),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(
+            result.stdout.strip(),
+            "base udev autodetect microcode modconf kms keyboard keymap consolefont "
+            "block encrypt filesystems fsck",
         )
 
     def test_bundled_templates_exist(self) -> None:
