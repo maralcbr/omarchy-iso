@@ -865,6 +865,15 @@ wait_for_install() {
 
     if grep -qi "installation stopped" <<<"$text"; then
       capture_console "failure-installer-installation-stopped"
+      # Preserve the useful end of the unified log before the live ISO is
+      # stopped. The menu optionally starts with "Upload log for support";
+      # move to "View full log" only when that item is present.
+      if grep -qi "Upload log for support" <<<"$text"; then
+        press down
+      fi
+      press ret
+      sleep 2
+      capture_console "failure-installer-full-log"
       echo "Install failed — screenshot saved to $RUN_DIR" >&2
       return 1
     fi

@@ -19,5 +19,6 @@ grep -Fq -- '-device scsi-cd,drive=cdrom0,bus=scsi0.0,bootindex=2' "$harness"
 grep -Fq -- 'mktemp -u "${TMPDIR:-/tmp}/omarchy-iso-test-qmp.XXXXXX").sock' "$harness"
 ! grep -Fq -- '${ch,,}' "$harness"
 ! grep -Fq -- '${text,,}' "$harness"
+grep -Fq -- 'failure-installer-full-log' "$harness"
 
 echo "ARM acceptance host tests passed"
