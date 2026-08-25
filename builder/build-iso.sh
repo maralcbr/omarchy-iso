@@ -44,7 +44,7 @@ if [[ $OMARCHY_ARCH == "aarch64" ]]; then
   for snapshot_package_name in "${snapshot_package_names[@]}"; do
     snapshot_packages+=("$offline_mirror_dir/$snapshot_package_name")
   done
-  (( ${#snapshot_packages[@]} == 27 ))
+  (( ${#snapshot_packages[@]} == ARM_REPOSITORY_PACKAGE_COUNT + 6 ))
   repo-add "$offline_mirror_dir/arm-snapshots.db.tar.gz" "${snapshot_packages[@]}"
 fi
 

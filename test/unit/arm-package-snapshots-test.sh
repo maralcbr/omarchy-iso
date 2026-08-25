@@ -6,6 +6,9 @@ ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+grep -Fq '${#snapshot_packages[@]} == ARM_REPOSITORY_PACKAGE_COUNT + 6' \
+  "$ROOT/builder/build-iso.sh"
+
 builder="$work/builder"
 remote="$work/remote"
 stubs="$work/stubs"
