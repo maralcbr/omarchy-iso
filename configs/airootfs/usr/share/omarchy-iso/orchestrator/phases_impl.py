@@ -387,7 +387,7 @@ def _install_pre_mounted_limine(ctx: InstallContext) -> None:
         disk=Path(disk),
         part=part,
         esp_path=boot.get("esp_path", "/EFI/limine"),
-        efi_binary=boot.get("efi_binary", "limine_x64.efi"),
+        efi_binary=boot.get("efi_binary", _limine_efi_names()[1]),
         pre_state=pre_state,
     )
 
@@ -395,6 +395,15 @@ def _install_pre_mounted_limine(ctx: InstallContext) -> None:
     windows_after = _find_label_entries(post_state["entries"], "Windows")
     if windows_before and not windows_after:
         raise RuntimeError("Windows boot entry disappeared during Limine install — aborting")
+
+
+def _limine_efi_names(machine: str | None = None) -> tuple[str, str, str]:
+    machine = (machine or os.uname().machine).lower()
+    if machine in {"aarch64", "arm64"}:
+        return "BOOTAA64.EFI", "limine_aa64.efi", "BOOTAA64.EFI"
+    if machine == "x86_64":
+        return "BOOTX64.EFI", "limine_x64.efi", "BOOTX64.EFI"
+    raise RuntimeError(f"Unsupported Limine EFI architecture: {machine}")
 
 
 def _install_limine_efi(
@@ -405,15 +414,16 @@ def _install_limine_efi(
     part: int,
     removable: bool = False,
     esp_path: str = "/EFI/limine",
-    efi_binary: str = "limine_x64.efi",
+    efi_binary: str | None = None,
     pre_state: dict | None = None,
 ) -> None:
+    source_name, default_binary, removable_binary = _limine_efi_names()
+    efi_binary = efi_binary or default_binary
     if removable:
         esp_path = "/EFI/BOOT"
-        efi_binary = "BOOTX64.EFI"
+        efi_binary = removable_binary
 
     limine_path = ctx.target / "usr" / "share" / "limine"
-    source_name = "BOOTX64.EFI"
     target_dir = Path(esp_mount) / esp_path.lstrip("/")
     target_path = target_dir / efi_binary
     _copy_required(limine_path / source_name, ctx.target / target_path.relative_to("/"))
@@ -544,7 +554,14 @@ def _write_limine_defaults(
     if "root=" not in cmdline:
         raise RuntimeError(f"Computed cmdline has no root=: {cmdline!r}")
 
-    default_text = _limine_template(ctx, "default.conf").read_text()
+    default_template = _limine_template(ctx, "default.conf")
+    limine_template = _limine_template(ctx, "limine.conf")
+    vendor_templates = ctx.target / "usr" / "share" / "omarchy" / "default" / "limine"
+    vendor_templates.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(default_template, vendor_templates / "default.conf")
+    shutil.copy2(limine_template, vendor_templates / "limine.conf")
+
+    default_text = default_template.read_text()
     default_text = default_text.replace("@@CMDLINE@@", cmdline)
     default_text = re.sub(r'^ESP_PATH=.*$', f'ESP_PATH="{esp_mount}"', default_text, flags=re.MULTILINE)
     if enable_fallback is not None:
@@ -562,7 +579,7 @@ def _write_limine_defaults(
 
     limine_conf = ctx.target / esp_mount.lstrip("/") / "limine.conf"
     limine_conf.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(_limine_template(ctx, "limine.conf"), limine_conf)
+    shutil.copy2(limine_template, limine_conf)
 
 
 def _installer_esp_mount(installer) -> str:
@@ -574,11 +591,13 @@ def _installer_esp_mount(installer) -> str:
 
 
 def _limine_template(ctx: InstallContext, filename: str) -> Path:
+    bundled_assets = Path(__file__).resolve().parent.parent / "assets" / "limine"
     candidates = [
         ctx.target / "usr" / "share" / "omarchy" / "install" / "assets" / "limine" / filename,
         ctx.target / "usr" / "share" / "omarchy" / "default" / "limine" / filename,
         ctx.omarchy_path / "install" / "assets" / "limine" / filename,
         ctx.omarchy_path / "default" / "limine" / filename,
+        bundled_assets / filename,
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -755,7 +774,7 @@ def _boot_intent(ctx: InstallContext) -> dict:
     boot = dict(ctx.omarchy_install.get("boot") or {})
     boot.setdefault("esp_mount", "/boot")
     boot.setdefault("esp_path", "/EFI/limine")
-    boot.setdefault("efi_binary", "limine_x64.efi")
+    boot.setdefault("efi_binary", _limine_efi_names()[1])
     boot.setdefault("enable_fallback", not ctx.is_protected)
     return boot
 
@@ -1720,7 +1739,7 @@ def validate_boot(ctx: InstallContext) -> None:
     kernel = storage.get("kernel") or (ctx.user_configuration.get("kernels") or ["linux"])[0]
 
     if arch.has_uefi():
-        limine_binary = esp_mount / boot.get("esp_path", "/EFI/limine").lstrip("/") / boot.get("efi_binary", "limine_x64.efi")
+        limine_binary = esp_mount / boot.get("esp_path", "/EFI/limine").lstrip("/") / boot.get("efi_binary", _limine_efi_names()[1])
         if not limine_binary.exists() or limine_binary.stat().st_size == 0:
             raise RuntimeError(f"{limine_binary} missing or empty")
 
