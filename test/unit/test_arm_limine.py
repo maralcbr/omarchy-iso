@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import sys
 import types
 import unittest
@@ -25,6 +26,21 @@ class ArmLimineTest(unittest.TestCase):
         self.assertEqual(
             phases_impl._limine_efi_names("x86_64"),
             ("BOOTX64.EFI", "limine_x64.efi", "BOOTX64.EFI"),
+        )
+
+    def test_arm_machine_detection(self) -> None:
+        self.assertTrue(phases_impl._is_arm_machine("aarch64"))
+        self.assertTrue(phases_impl._is_arm_machine("arm64"))
+        self.assertFalse(phases_impl._is_arm_machine("x86_64"))
+
+    def test_arm_updater_builds_uki_and_manages_one_entry(self) -> None:
+        script = phases_impl.ARM_LIMINE_UPDATE_SCRIPT
+        self.assertIn('--kernelimage "$kernel_image"', script)
+        self.assertIn("### BEGIN OMARCHY ARM ENTRY ###", script)
+        self.assertIn("protocol: efi", script)
+        self.assertIn(
+            "Target = linux-aarch64",
+            inspect.getsource(phases_impl._install_arm_limine_updater),
         )
 
     def test_bundled_templates_exist(self) -> None:

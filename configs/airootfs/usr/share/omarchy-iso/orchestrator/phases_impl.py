@@ -1323,7 +1323,22 @@ def finalize_limine_boot(ctx: InstallContext) -> None:
     if not limine_conf.exists():
         raise RuntimeError(f"{limine_conf} missing")
 
-    subprocess.run(["arch-chroot", str(ctx.target), "limine-update"], check=True)
+    if _is_arm_machine():
+        # limine-entry-tool 1.36 only generates entries for x86_64 and the
+        # Arch Linux ARM kernel does not ship the pkgbase file its mkinitcpio
+        # hook discovers.  Keep the package-owned tooling for x86, but install
+        # a small ARM updater that builds the UKI from /boot/Image and owns one
+        # clearly delimited entry in limine.conf.  The pacman hook keeps that
+        # entry current on later linux-aarch64 upgrades.
+        kernel_cmdline = ctx.target / "etc" / "kernel" / "cmdline"
+        kernel_cmdline.write_text(cmdline + "\n")
+        _install_arm_limine_updater(ctx)
+        subprocess.run(
+            ["arch-chroot", str(ctx.target), "/usr/local/bin/omarchy-arm-limine-update"],
+            check=True,
+        )
+    else:
+        subprocess.run(["arch-chroot", str(ctx.target), "limine-update"], check=True)
 
     subprocess.run(
         ["arch-chroot", str(ctx.target), "btrfs", "quota", "disable", "/"],
@@ -1334,6 +1349,116 @@ def finalize_limine_boot(ctx: InstallContext) -> None:
         raise RuntimeError(f"{limine_conf} has no Omarchy entry")
     if "cryptdevice=" in cmdline and "cryptdevice=" not in limine_conf.read_text():
         raise RuntimeError(f"encrypted install but {limine_conf} has no cryptdevice=")
+
+
+def _is_arm_machine(machine: str | None = None) -> bool:
+    return (machine or os.uname().machine).lower() in {"aarch64", "arm64"}
+
+
+ARM_LIMINE_UPDATE_SCRIPT = r'''#!/bin/bash
+set -euo pipefail
+
+kernel="linux-aarch64"
+preset="/etc/mkinitcpio.d/$kernel.preset"
+[[ -f $preset ]] || {
+  echo "Missing ARM mkinitcpio preset: $preset" >&2
+  exit 1
+}
+
+# The preset and Limine defaults are root-owned shell configuration supplied
+# by signed packages or the installer.
+# shellcheck disable=SC1090
+source "$preset"
+# shellcheck disable=SC1091
+source /etc/default/limine
+
+kernel_version="${ALL_kver:-}"
+[[ -n $kernel_version ]] || {
+  echo "ALL_kver is empty in $preset" >&2
+  exit 1
+}
+
+esp_path="${ESP_PATH:-/boot}"
+kernel_image="$esp_path/Image"
+[[ -s $kernel_image ]] || {
+  echo "Missing ARM kernel image: $kernel_image" >&2
+  exit 1
+}
+
+cmdline_file="/etc/kernel/cmdline"
+[[ -s $cmdline_file ]] || {
+  echo "Missing kernel command line: $cmdline_file" >&2
+  exit 1
+}
+cmdline=$(<"$cmdline_file")
+
+uki_prefix="${CUSTOM_UKI_NAME:-omarchy}"
+uki_relative="EFI/Linux/${uki_prefix}_${kernel}.efi"
+uki_path="$esp_path/$uki_relative"
+install -d -m 700 "$(dirname "$uki_path")"
+mkinitcpio \
+  --kernel "$kernel_version" \
+  --uki "$uki_path" \
+  --kernelimage "$kernel_image" \
+  --cmdline "$cmdline_file"
+[[ -s $uki_path ]] || {
+  echo "ARM UKI was not created: $uki_path" >&2
+  exit 1
+}
+
+limine_conf="$esp_path/limine.conf"
+[[ -f $limine_conf ]] || {
+  echo "Missing Limine configuration: $limine_conf" >&2
+  exit 1
+}
+
+entry_tmp=$(mktemp)
+trap 'rm -f "$entry_tmp"' EXIT
+awk '
+  /^### BEGIN OMARCHY ARM ENTRY ###$/ { skip=1; next }
+  /^### END OMARCHY ARM ENTRY ###$/ { skip=0; next }
+  !skip { print }
+' "$limine_conf" >"$entry_tmp"
+
+{
+  cat "$entry_tmp"
+  printf '\n### BEGIN OMARCHY ARM ENTRY ###\n'
+  printf '/+Omarchy\n'
+  printf 'comment: Omarchy ARM64\n'
+  printf '  //%s\n' "$kernel"
+  printf '  comment: Kernel version: %s\n' "$kernel_version"
+  printf '  protocol: efi\n'
+  printf '  path: boot():/%s\n' "$uki_relative"
+  printf '  cmdline: %s\n' "$cmdline"
+  printf '### END OMARCHY ARM ENTRY ###\n'
+} >"$limine_conf"
+'''
+
+
+def _install_arm_limine_updater(ctx: InstallContext) -> None:
+    updater = ctx.target / "usr" / "local" / "bin" / "omarchy-arm-limine-update"
+    updater.parent.mkdir(parents=True, exist_ok=True)
+    updater.write_text(ARM_LIMINE_UPDATE_SCRIPT)
+    updater.chmod(0o755)
+
+    hook = ctx.target / "etc" / "pacman.d" / "hooks" / "95-omarchy-arm-limine.hook"
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text(
+        textwrap.dedent(
+            """\
+            [Trigger]
+            Operation = Install
+            Operation = Upgrade
+            Type = Package
+            Target = linux-aarch64
+
+            [Action]
+            Description = Rebuilding the Omarchy ARM64 boot entry...
+            When = PostTransaction
+            Exec = /usr/local/bin/omarchy-arm-limine-update
+            """
+        )
+    )
 
 
 def _strip_shell_quotes(value: str) -> str:
