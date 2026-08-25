@@ -187,7 +187,9 @@ class StageProvisioningStateTest(unittest.TestCase):
         # A fake bundled Node tarball on the "live ISO".
         self.packages = Path(self.tmp.name) / "opt-packages"
         self.packages.mkdir()
-        (self.packages / "node-v24.0.0-linux-x64.tar.gz").write_bytes(b"node")
+        node_name = phases_impl._node_tarball_pattern().replace("*", "24.0.0")
+        self.node_tarball = self.packages / node_name
+        self.node_tarball.write_bytes(b"node")
         node_patch = mock.patch.object(phases_impl, "NODE_PACKAGES_DIR", self.packages)
         node_patch.start()
         self.addCleanup(node_patch.stop)
@@ -207,9 +209,21 @@ class StageProvisioningStateTest(unittest.TestCase):
         ctx = make_ctx(self.target, defer_provisioning=False)
         phases_impl.stage_provisioning_state(ctx)
 
-        self.assertTrue((self.provisioning_dir() / "packages/node-v24.0.0-linux-x64.tar.gz").exists())
+        self.assertTrue(
+            (self.provisioning_dir() / "packages" / self.node_tarball.name).exists()
+        )
         self.assertFalse((self.provisioning_dir() / "pending").exists())
         self.assertFalse((self.target / "etc/systemd/system/omarchy-provision-owner.service").exists())
+
+    def test_node_tarball_pattern_matches_target_architecture(self):
+        self.assertEqual(
+            phases_impl._node_tarball_pattern("aarch64"),
+            "node-v*-linux-arm64.tar.gz",
+        )
+        self.assertEqual(
+            phases_impl._node_tarball_pattern("x86_64"),
+            "node-v*-linux-x64.tar.gz",
+        )
 
     def test_deferred_provisioning_against_runtime_without_support_fails_clearly(self):
         ctx = make_ctx(self.target)
