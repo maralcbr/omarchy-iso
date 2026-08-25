@@ -145,7 +145,7 @@ mkdir -p "$BASE_DIR" "$RUN_DIR"
 
 # Unix socket paths are capped at ~108 bytes, which a run directory nested in
 # test-runs/<iso-name>/runs/<timestamp> can exceed. Keep the socket in /tmp.
-QMP_SOCK=$(mktemp -u "${TMPDIR:-/tmp}/omarchy-iso-test-qmp.XXXXXX.sock")
+QMP_SOCK="$(mktemp -u "${TMPDIR:-/tmp}/omarchy-iso-test-qmp.XXXXXX").sock"
 PIDFILE="$RUN_DIR/qemu.pid"
 
 log() {
