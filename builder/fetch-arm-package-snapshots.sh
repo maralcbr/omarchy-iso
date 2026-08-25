@@ -12,7 +12,7 @@ source "$builder_root/arm-package-snapshots.conf"
 [[ $ARM_REPOSITORY_SOURCE_COMMIT =~ ^[0-9a-f]{40}$ ]]
 [[ $ARM_REPOSITORY_SIGNING_FINGERPRINT =~ ^[A-F0-9]{40}$ ]]
 [[ $ARM_REPOSITORY_PACKAGE_COUNT =~ ^[1-9][0-9]*$ ]]
-[[ $ARM_RUNTIME_RELEASE =~ ^asahi-quattro-[0-9a-f]{8}$ ]]
+[[ $ARM_RUNTIME_RELEASE =~ ^(asahi-quattro-[0-9a-f]{8}|asahi-packages-candidate-[0-9a-f]{40})$ ]]
 [[ $ARM_RUNTIME_MANIFEST_SHA256 =~ ^[0-9a-f]{64}$ ]]
 [[ $ARM_RUNTIME_SOURCE_COMMIT =~ ^[0-9a-f]{40}$ ]]
 [[ $ARM_RUNTIME_SIGNING_FINGERPRINT =~ ^[A-F0-9]{40}$ ]]
@@ -104,10 +104,14 @@ while IFS= read -r record; do
 done < <(sed -n 's/^package=//p' "$work/CANDIDATE")
 
 runtime_url="$repository_base/$ARM_RUNTIME_RELEASE"
+runtime_key="$builder_root/omarchy-arm-runtime.asc"
+if [[ $ARM_RUNTIME_RELEASE == asahi-packages-candidate-* ]]; then
+  runtime_key="$builder_root/omarchy-arm-repository.asc"
+fi
 download "$runtime_url/asahi-quattro-bundle.manifest" "$work/runtime.manifest"
 download "$runtime_url/asahi-quattro-bundle.manifest.sig" "$work/runtime.manifest.sig"
 [[ $(sha256sum "$work/runtime.manifest" | cut -d' ' -f1) == "$ARM_RUNTIME_MANIFEST_SHA256" ]]
-verify_signature "$builder_root/omarchy-arm-runtime.asc" "$work/runtime.manifest.sig" \
+verify_signature "$runtime_key" "$work/runtime.manifest.sig" \
   "$work/runtime.manifest" "$ARM_RUNTIME_SIGNING_FINGERPRINT" "$work/gnupg-runtime"
 grep -Fxq 'format=2' "$work/runtime.manifest"
 grep -Fxq 'bundle=asahi-quattro' "$work/runtime.manifest"
@@ -116,7 +120,7 @@ grep -Fxq 'package_count=6' "$work/runtime.manifest"
 (( $(grep -c '^package=' "$work/runtime.manifest") == 6 ))
 
 while IFS= read -r record; do
-  verify_package_record "$ARM_RUNTIME_RELEASE" "$builder_root/omarchy-arm-runtime.asc" \
+  verify_package_record "$ARM_RUNTIME_RELEASE" "$runtime_key" \
     "$ARM_RUNTIME_SIGNING_FINGERPRINT" "$record" "" "$work/gnupg-runtime"
 done < <(sed -n 's/^package=//p' "$work/runtime.manifest")
 
