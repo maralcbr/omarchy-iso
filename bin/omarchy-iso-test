@@ -23,6 +23,7 @@
 #   --sync-all DIR     Push all of DIR (bin/config/shell/test) into the guest
 #   --port PORT        Host port forwarded to guest SSH (default 2222)
 #   --memory MB        VM memory (default 8192)
+#   --cpus COUNT       Virtual CPUs (default: all host CPUs)
 #   --timeout SECS     Install timeout (default 2400)
 #   --keep-running     Leave the acceptance VM running after the suite finishes
 #   --no-preview       Do not open the collected screenshots in imv
@@ -35,6 +36,11 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 ISO=""
 SSH_PORT=2222
 MEMORY=8192
+if command -v nproc >/dev/null 2>&1; then
+  CPUS=$(nproc)
+else
+  CPUS=$(sysctl -n hw.logicalcpu)
+fi
 INSTALL_TIMEOUT=2400
 BOOT_TIMEOUT=600
 ENCRYPT=false
@@ -62,6 +68,7 @@ while (($#)); do
     --sync-all) SYNC_DIR="$2"; SYNC_ALL=true; shift ;;
     --port) SSH_PORT="$2"; shift ;;
     --memory) MEMORY="$2"; shift ;;
+    --cpus) CPUS="$2"; shift ;;
     --timeout) INSTALL_TIMEOUT="$2"; shift ;;
     -*) echo "Unknown option: $1" >&2; exit 1 ;;
     *) ISO="$1" ;;
@@ -83,10 +90,45 @@ if [[ ! -f ${ISO:-} ]]; then
   exit 1
 fi
 
-omarchy-pkg-add qemu-full edk2-ovmf socat imagemagick tesseract tesseract-data-eng
+case "$CPUS" in
+  ''|*[!0-9]*) echo "CPU count must be a positive integer" >&2; exit 1 ;;
+esac
+(( CPUS > 0 )) || { echo "CPU count must be a positive integer" >&2; exit 1; }
 
-OVMF_CODE="/usr/share/edk2/x64/OVMF_CODE.4m.fd"
-OVMF_VARS_TEMPLATE="/usr/share/edk2/x64/OVMF_VARS.4m.fd"
+HOST_OS=$(uname -s)
+GUEST_ARCH=x86_64
+[[ $(basename "$ISO") == *-aarch64*.iso ]] && GUEST_ARCH=aarch64
+
+if [[ $HOST_OS == "Darwin" ]]; then
+  if [[ $GUEST_ARCH != "aarch64" || $(uname -m) != "arm64" ]]; then
+    echo "macOS acceptance currently supports native aarch64 ISOs on Apple Silicon only" >&2
+    exit 1
+  fi
+
+  export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+  for command in qemu-system-aarch64 qemu-img socat magick tesseract ssh ssh-keygen python3; do
+    command -v "$command" >/dev/null 2>&1 || {
+      echo "Missing macOS acceptance dependency: $command" >&2
+      exit 1
+    }
+  done
+
+  QEMU_SHARE="$(brew --prefix qemu)/share/qemu"
+  OVMF_CODE="$QEMU_SHARE/edk2-aarch64-code.fd"
+  OVMF_VARS_TEMPLATE="$QEMU_SHARE/edk2-arm-vars.fd"
+  TIMEOUT_COMMAND=()
+  command -v gtimeout >/dev/null 2>&1 && TIMEOUT_COMMAND=(gtimeout 5)
+else
+  omarchy-pkg-add qemu-full edk2-ovmf socat imagemagick tesseract tesseract-data-eng
+  OVMF_CODE="/usr/share/edk2/x64/OVMF_CODE.4m.fd"
+  OVMF_VARS_TEMPLATE="/usr/share/edk2/x64/OVMF_VARS.4m.fd"
+  TIMEOUT_COMMAND=(timeout 5)
+fi
+
+[[ -f $OVMF_CODE && -f $OVMF_VARS_TEMPLATE ]] || {
+  echo "Missing UEFI firmware for $GUEST_ARCH" >&2
+  exit 1
+}
 
 BASE_NAME="$(basename "$ISO" .iso)"
 $ENCRYPT && BASE_NAME+="-encrypted"
@@ -94,7 +136,7 @@ $PROVISION && BASE_NAME+="-provision"
 BASE_DIR="$REPO_DIR/test-runs/$BASE_NAME"
 RUN_DIR="$BASE_DIR/runs/$(date +%Y%m%d-%H%M%S)"
 BASE_DISK="$BASE_DIR/base.qcow2"
-BASE_OVMF="$BASE_DIR/OVMF_VARS.4m.fd"
+BASE_OVMF="$BASE_DIR/OVMF_VARS.fd"
 SSH_KEY="$BASE_DIR/id_ed25519"
 HTTP_PORT=$((SSH_PORT + 1))
 HTTP_PID=""
@@ -118,7 +160,7 @@ vm_running() {
 
 qmp() {
   printf '{"execute":"qmp_capabilities"}\n{"execute":%s}\n' "$1" |
-    timeout 5 socat -t 2 - "UNIX-CONNECT:$QMP_SOCK" 2>/dev/null || true
+    "${TIMEOUT_COMMAND[@]}" socat -t 2 - "UNIX-CONNECT:$QMP_SOCK" 2>/dev/null || true
 }
 
 screendump() {
@@ -164,10 +206,9 @@ open_screenshots() {
   local -a screenshots=()
 
   while IFS= read -r -d '' entry; do
-    screenshots+=("${entry#* }")
+    screenshots+=("$entry")
   done < <(
-    find "$RUN_DIR" -type f \( -name "success-*.png" -o -name "failure-*.png" \) -printf '%T@ %p\0' |
-      sort -zn
+    find "$RUN_DIR" -type f \( -name "success-*.png" -o -name "failure-*.png" \) -print0
   )
 
   (( ${#screenshots[@]} > 0 )) || return 0
@@ -201,24 +242,45 @@ start_vm() {
   local disk="$1" serial="$2"
   shift 2
 
-  qemu-system-x86_64 \
-    -cpu host -enable-kvm -machine q35,accel=kvm \
-    -smp "$(nproc)" \
-    -m "$MEMORY" \
-    -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
-    -drive if=pflash,format=raw,file="$BASE_OVMF" \
-    -drive file="$disk",format=qcow2,if=none,id=drive0 \
-    -device virtio-blk-pci,drive=drive0,bootindex=1 \
-    -device virtio-vga \
-    -display none \
-    -usb -device usb-tablet \
-    -netdev user,id=net0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22 \
-    -device virtio-net-pci,netdev=net0 \
-    -qmp "unix:$QMP_SOCK,server,nowait" \
-    -serial "file:$serial" \
-    -pidfile "$PIDFILE" \
-    -daemonize \
-    "$@"
+  if [[ $GUEST_ARCH == "aarch64" ]]; then
+    qemu-system-aarch64 \
+      -cpu host -machine virt,accel=hvf \
+      -smp "$CPUS" \
+      -m "$MEMORY" \
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+      -drive if=pflash,format=raw,file="$BASE_OVMF" \
+      -drive file="$disk",format=qcow2,if=none,id=drive0 \
+      -device virtio-blk-pci,drive=drive0,bootindex=1 \
+      -device virtio-gpu-pci \
+      -display none \
+      -device qemu-xhci,id=xhci -device usb-tablet,bus=xhci.0 \
+      -netdev user,id=net0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22 \
+      -device virtio-net-pci,netdev=net0 \
+      -qmp "unix:$QMP_SOCK,server,nowait" \
+      -serial "file:$serial" \
+      -pidfile "$PIDFILE" \
+      -daemonize \
+      "$@"
+  else
+    qemu-system-x86_64 \
+      -cpu host -enable-kvm -machine q35,accel=kvm \
+      -smp "$CPUS" \
+      -m "$MEMORY" \
+      -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+      -drive if=pflash,format=raw,file="$BASE_OVMF" \
+      -drive file="$disk",format=qcow2,if=none,id=drive0 \
+      -device virtio-blk-pci,drive=drive0,bootindex=1 \
+      -device virtio-vga \
+      -display none \
+      -usb -device usb-tablet \
+      -netdev user,id=net0,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22 \
+      -device virtio-net-pci,netdev=net0 \
+      -qmp "unix:$QMP_SOCK,server,nowait" \
+      -serial "file:$serial" \
+      -pidfile "$PIDFILE" \
+      -daemonize \
+      "$@"
+  fi
 }
 
 # ------------------------------------------------------------ console driver
@@ -976,9 +1038,19 @@ install_phase() {
   qemu-img create -f qcow2 "$BASE_DISK" 40G >/dev/null
   cp "$OVMF_VARS_TEMPLATE" "$BASE_OVMF"
 
-  start_vm "$BASE_DISK" "$RUN_DIR/install-serial.log" \
-    -drive "file=$ISO,media=cdrom,if=none,format=raw,id=cdrom0" \
-    -device ide-cd,drive=cdrom0,bootindex=2
+  local -a iso_boot_args=(
+    -drive "file=$ISO,media=cdrom,if=none,format=raw,id=cdrom0"
+  )
+  if [[ $GUEST_ARCH == "aarch64" ]]; then
+    iso_boot_args+=(
+      -device virtio-scsi-pci,id=scsi0
+      -device scsi-cd,drive=cdrom0,bus=scsi0.0,bootindex=2
+    )
+  else
+    iso_boot_args+=(-device ide-cd,drive=cdrom0,bootindex=2)
+  fi
+
+  start_vm "$BASE_DISK" "$RUN_DIR/install-serial.log" "${iso_boot_args[@]}"
 
   drive_configurator
   wait_for_install
