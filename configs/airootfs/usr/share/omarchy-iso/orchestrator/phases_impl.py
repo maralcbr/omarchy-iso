@@ -126,6 +126,9 @@ EARLY_BOOTSTRAP_BASE_PACKAGES = [
     "base-devel",
     "git",
     "limine",
+    "limine-mkinitcpio-hook",
+    "limine-snapper-sync",
+    "snapper",
     "efibootmgr",
     "omarchy-keyring",
 ]
@@ -387,7 +390,7 @@ def _install_pre_mounted_limine(ctx: InstallContext) -> None:
         disk=Path(disk),
         part=part,
         esp_path=boot.get("esp_path", "/EFI/limine"),
-        efi_binary=boot.get("efi_binary", "limine_x64.efi"),
+        efi_binary=boot.get("efi_binary", _limine_efi_names()[1]),
         pre_state=pre_state,
     )
 
@@ -395,6 +398,15 @@ def _install_pre_mounted_limine(ctx: InstallContext) -> None:
     windows_after = _find_label_entries(post_state["entries"], "Windows")
     if windows_before and not windows_after:
         raise RuntimeError("Windows boot entry disappeared during Limine install — aborting")
+
+
+def _limine_efi_names(machine: str | None = None) -> tuple[str, str, str]:
+    machine = (machine or os.uname().machine).lower()
+    if machine in {"aarch64", "arm64"}:
+        return "BOOTAA64.EFI", "limine_aa64.efi", "BOOTAA64.EFI"
+    if machine == "x86_64":
+        return "BOOTX64.EFI", "limine_x64.efi", "BOOTX64.EFI"
+    raise RuntimeError(f"Unsupported Limine EFI architecture: {machine}")
 
 
 def _install_limine_efi(
@@ -405,15 +417,16 @@ def _install_limine_efi(
     part: int,
     removable: bool = False,
     esp_path: str = "/EFI/limine",
-    efi_binary: str = "limine_x64.efi",
+    efi_binary: str | None = None,
     pre_state: dict | None = None,
 ) -> None:
+    source_name, default_binary, removable_binary = _limine_efi_names()
+    efi_binary = efi_binary or default_binary
     if removable:
         esp_path = "/EFI/BOOT"
-        efi_binary = "BOOTX64.EFI"
+        efi_binary = removable_binary
 
     limine_path = ctx.target / "usr" / "share" / "limine"
-    source_name = "BOOTX64.EFI"
     target_dir = Path(esp_mount) / esp_path.lstrip("/")
     target_path = target_dir / efi_binary
     _copy_required(limine_path / source_name, ctx.target / target_path.relative_to("/"))
@@ -544,7 +557,14 @@ def _write_limine_defaults(
     if "root=" not in cmdline:
         raise RuntimeError(f"Computed cmdline has no root=: {cmdline!r}")
 
-    default_text = _limine_template(ctx, "default.conf").read_text()
+    default_template = _limine_template(ctx, "default.conf")
+    limine_template = _limine_template(ctx, "limine.conf")
+    vendor_templates = ctx.target / "usr" / "share" / "omarchy" / "default" / "limine"
+    vendor_templates.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(default_template, vendor_templates / "default.conf")
+    shutil.copy2(limine_template, vendor_templates / "limine.conf")
+
+    default_text = default_template.read_text()
     default_text = default_text.replace("@@CMDLINE@@", cmdline)
     default_text = re.sub(r'^ESP_PATH=.*$', f'ESP_PATH="{esp_mount}"', default_text, flags=re.MULTILINE)
     if enable_fallback is not None:
@@ -562,7 +582,7 @@ def _write_limine_defaults(
 
     limine_conf = ctx.target / esp_mount.lstrip("/") / "limine.conf"
     limine_conf.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(_limine_template(ctx, "limine.conf"), limine_conf)
+    shutil.copy2(limine_template, limine_conf)
 
 
 def _installer_esp_mount(installer) -> str:
@@ -574,11 +594,13 @@ def _installer_esp_mount(installer) -> str:
 
 
 def _limine_template(ctx: InstallContext, filename: str) -> Path:
+    bundled_assets = Path(__file__).resolve().parent.parent / "assets" / "limine"
     candidates = [
         ctx.target / "usr" / "share" / "omarchy" / "install" / "assets" / "limine" / filename,
         ctx.target / "usr" / "share" / "omarchy" / "default" / "limine" / filename,
         ctx.omarchy_path / "install" / "assets" / "limine" / filename,
         ctx.omarchy_path / "default" / "limine" / filename,
+        bundled_assets / filename,
     ]
     for candidate in candidates:
         if candidate.exists():
@@ -755,7 +777,7 @@ def _boot_intent(ctx: InstallContext) -> dict:
     boot = dict(ctx.omarchy_install.get("boot") or {})
     boot.setdefault("esp_mount", "/boot")
     boot.setdefault("esp_path", "/EFI/limine")
-    boot.setdefault("efi_binary", "limine_x64.efi")
+    boot.setdefault("efi_binary", _limine_efi_names()[1])
     boot.setdefault("enable_fallback", not ctx.is_protected)
     return boot
 
@@ -1200,7 +1222,7 @@ def stage_provisioning_state(ctx: InstallContext) -> None:
 
 
 def _stage_node_tarball(ctx: InstallContext, provisioning_dir) -> None:
-    tarballs = sorted(NODE_PACKAGES_DIR.glob("node-v*-linux-x64.tar.gz"))
+    tarballs = sorted(NODE_PACKAGES_DIR.glob(_node_tarball_pattern()))
     if not tarballs:
         # Hard error on every install, not just deferred-provisioning installs: the stash is what lets a
         # later factory reset finalize the next owner offline, and an ISO
@@ -1216,6 +1238,15 @@ def _stage_node_tarball(ctx: InstallContext, provisioning_dir) -> None:
     if not target_tarball.exists():
         info("› stashing Node tarball for offline first-boot setup")
         shutil.copy2(tarballs[0], target_tarball)
+
+
+def _node_tarball_pattern(machine: str | None = None) -> str:
+    machine = (machine or os.uname().machine).lower()
+    if machine in {"aarch64", "arm64"}:
+        return "node-v*-linux-arm64.tar.gz"
+    if machine == "x86_64":
+        return "node-v*-linux-x64.tar.gz"
+    raise RuntimeError(f"Unsupported Node bundle architecture: {machine}")
 
 
 def _provision_install_encrypted(ctx: InstallContext) -> bool:
@@ -1301,7 +1332,24 @@ def finalize_limine_boot(ctx: InstallContext) -> None:
     if not limine_conf.exists():
         raise RuntimeError(f"{limine_conf} missing")
 
-    subprocess.run(["arch-chroot", str(ctx.target), "limine-update"], check=True)
+    if _is_arm_machine():
+        # limine-entry-tool 1.36 only generates entries for x86_64 and the
+        # Arch Linux ARM kernel does not ship the pkgbase file its mkinitcpio
+        # hook discovers.  Keep the package-owned tooling for x86, but install
+        # a small ARM updater that builds the UKI from /boot/Image and owns one
+        # clearly delimited entry in limine.conf.  The pacman hook keeps that
+        # entry current on later linux-aarch64 upgrades.
+        if "cryptdevice=" in cmdline:
+            cmdline = _prepare_arm_systemd_encryption(ctx, cmdline)
+        kernel_cmdline = ctx.target / "etc" / "kernel" / "cmdline"
+        kernel_cmdline.write_text(cmdline + "\n")
+        _install_arm_limine_updater(ctx)
+        subprocess.run(
+            ["arch-chroot", str(ctx.target), "/usr/local/bin/omarchy-arm-limine-update"],
+            check=True,
+        )
+    else:
+        subprocess.run(["arch-chroot", str(ctx.target), "limine-update"], check=True)
 
     subprocess.run(
         ["arch-chroot", str(ctx.target), "btrfs", "quota", "disable", "/"],
@@ -1310,8 +1358,228 @@ def finalize_limine_boot(ctx: InstallContext) -> None:
     )
     if "Omarchy" not in limine_conf.read_text():
         raise RuntimeError(f"{limine_conf} has no Omarchy entry")
-    if "cryptdevice=" in cmdline and "cryptdevice=" not in limine_conf.read_text():
-        raise RuntimeError(f"encrypted install but {limine_conf} has no cryptdevice=")
+    encryption_parameter = "rd.luks.name=" if _is_arm_machine() else "cryptdevice="
+    if ctx.encrypt and encryption_parameter not in limine_conf.read_text():
+        raise RuntimeError(
+            f"encrypted install but {limine_conf} has no {encryption_parameter}"
+        )
+
+
+def _is_arm_machine(machine: str | None = None) -> bool:
+    return (machine or os.uname().machine).lower() in {"aarch64", "arm64"}
+
+
+ARM_ENCRYPTION_HOOKS_DROPIN = r'''# Generated by the Omarchy ARM installer.
+# Keep Archinstall's systemd initramfs and insert its matching encryption hook
+# immediately before filesystems.
+_omarchy_arm_hooks=()
+_omarchy_arm_encrypt_added=false
+_omarchy_arm_plymouth_added=false
+for _omarchy_arm_hook in "${HOOKS[@]}"; do
+  case $_omarchy_arm_hook in
+    encrypt|sd-encrypt)
+      ;;
+    plymouth)
+      if ! $_omarchy_arm_plymouth_added; then
+        _omarchy_arm_hooks+=(plymouth)
+        _omarchy_arm_plymouth_added=true
+      fi
+      ;;
+    filesystems)
+      if ! $_omarchy_arm_plymouth_added; then
+        _omarchy_arm_hooks+=(plymouth)
+        _omarchy_arm_plymouth_added=true
+      fi
+      if ! $_omarchy_arm_encrypt_added; then
+        _omarchy_arm_hooks+=(sd-encrypt)
+        _omarchy_arm_encrypt_added=true
+      fi
+      _omarchy_arm_hooks+=(filesystems)
+      ;;
+    *)
+      _omarchy_arm_hooks+=("$_omarchy_arm_hook")
+      ;;
+  esac
+done
+if ! $_omarchy_arm_plymouth_added; then
+  _omarchy_arm_hooks+=(plymouth)
+fi
+if ! $_omarchy_arm_encrypt_added; then
+  _omarchy_arm_hooks+=(sd-encrypt)
+fi
+HOOKS=("${_omarchy_arm_hooks[@]}")
+unset _omarchy_arm_hooks _omarchy_arm_encrypt_added _omarchy_arm_plymouth_added
+unset _omarchy_arm_hook
+'''
+
+
+def _prepare_arm_systemd_encryption(ctx: InstallContext, cmdline: str) -> str:
+    match = re.search(
+        r"(?<!\S)cryptdevice=(?P<device>[^:\s]+):(?P<name>[^:\s]+)(?::[^\s]+)?",
+        cmdline,
+    )
+    if not match:
+        raise RuntimeError(f"ARM encrypted command line has no usable cryptdevice=: {cmdline}")
+
+    device_spec = match.group("device")
+    mapper_name = match.group("name")
+    if device_spec.startswith("UUID="):
+        luks_uuid = device_spec.removeprefix("UUID=")
+    else:
+        device = capture_identifier(
+            ["blkid", "-t", device_spec, "-o", "device"],
+            f"the encrypted device matching {device_spec}",
+        )
+        if not device:
+            raise RuntimeError(f"could not resolve encrypted device {device_spec}")
+        luks_uuid = _blkid_uuid(device)
+
+    dropin = ctx.target / "etc" / "mkinitcpio.conf.d" / "90-omarchy-arm-encryption.conf"
+    dropin.parent.mkdir(parents=True, exist_ok=True)
+    dropin.write_text(ARM_ENCRYPTION_HOOKS_DROPIN)
+
+    crypttab = ctx.target / "etc" / "crypttab.initramfs"
+    crypttab.write_text(f"{mapper_name} UUID={luks_uuid} none luks,discard\n")
+
+    systemd_parameter = f"rd.luks.name={luks_uuid}={mapper_name}"
+    cmdline = cmdline[: match.start()] + systemd_parameter + cmdline[match.end() :]
+    cmdline = re.sub(
+        r"(?<!\S)cryptkey=rootfs:(?P<path>\S+)",
+        r"rd.luks.key=\g<path>",
+        cmdline,
+    )
+    if not re.search(r"(?<!\S)splash(?!\S)", cmdline):
+        cmdline += " splash"
+    # QEMU's ARM virt machine advertises its PL011 UART as firmware stdout.
+    # Without an explicit virtual console, Linux makes ttyAMA0 /dev/console
+    # and systemd's initramfs password agent becomes the only visible unlock
+    # prompt even when virtio-gpu and Plymouth are present. Make the graphical
+    # console authoritative for normal installed systems. The acceptance
+    # harness drives this display through QMP, so test-only serial wiring never
+    # needs to leak into the target command line.
+    cmdline = re.sub(r"(?<!\S)console=\S+", "", cmdline)
+    cmdline = re.sub(r"\s+", " ", cmdline).strip()
+    cmdline += " console=tty0"
+    if not re.search(r"(?<!\S)plymouth\.ignore-serial-consoles(?!\S)", cmdline):
+        cmdline += " plymouth.ignore-serial-consoles"
+    return cmdline
+
+
+ARM_LIMINE_UPDATE_SCRIPT = r'''#!/bin/bash
+set -euo pipefail
+
+kernel="linux-aarch64"
+preset="/etc/mkinitcpio.d/$kernel.preset"
+[[ -f $preset ]] || {
+  echo "Missing ARM mkinitcpio preset: $preset" >&2
+  exit 1
+}
+
+# The preset and Limine defaults are root-owned shell configuration supplied
+# by signed packages or the installer. limine-entry-tool uses a string-indexed
+# KERNEL_CMDLINE array, so declare it associative before sourcing the files.
+# shellcheck disable=SC1090
+source "$preset"
+declare -A KERNEL_CMDLINE=()
+set +u
+for config in \
+  /usr/share/limine-entry-tool.d/*.conf \
+  /etc/limine-entry-tool.conf \
+  /etc/limine-entry-tool.d/*.conf \
+  /etc/default/limine; do
+  [[ -f $config ]] || continue
+  # shellcheck disable=SC1090
+  source "$config"
+done
+set -u
+
+kernel_version="${ALL_kver:-}"
+[[ -n $kernel_version ]] || {
+  echo "ALL_kver is empty in $preset" >&2
+  exit 1
+}
+
+esp_path="${ESP_PATH:-/boot}"
+kernel_image="$esp_path/Image"
+[[ -s $kernel_image ]] || {
+  echo "Missing ARM kernel image: $kernel_image" >&2
+  exit 1
+}
+
+cmdline_file="/etc/kernel/cmdline"
+[[ -s $cmdline_file ]] || {
+  echo "Missing kernel command line: $cmdline_file" >&2
+  exit 1
+}
+cmdline=$(<"$cmdline_file")
+
+uki_prefix="${CUSTOM_UKI_NAME:-omarchy}"
+uki_relative="EFI/Linux/${uki_prefix}_${kernel}.efi"
+uki_path="$esp_path/$uki_relative"
+install -d -m 700 "$(dirname "$uki_path")"
+mkinitcpio \
+  --kernel "$kernel_version" \
+  --uki "$uki_path" \
+  --kernelimage "$kernel_image" \
+  --cmdline "$cmdline_file"
+[[ -s $uki_path ]] || {
+  echo "ARM UKI was not created: $uki_path" >&2
+  exit 1
+}
+
+limine_conf="$esp_path/limine.conf"
+[[ -f $limine_conf ]] || {
+  echo "Missing Limine configuration: $limine_conf" >&2
+  exit 1
+}
+
+entry_tmp=$(mktemp)
+trap 'rm -f "$entry_tmp"' EXIT
+awk '
+  /^### BEGIN OMARCHY ARM ENTRY ###$/ { skip=1; next }
+  /^### END OMARCHY ARM ENTRY ###$/ { skip=0; next }
+  !skip { print }
+' "$limine_conf" >"$entry_tmp"
+
+{
+  cat "$entry_tmp"
+  printf '\n### BEGIN OMARCHY ARM ENTRY ###\n'
+  printf '/+Omarchy\n'
+  printf 'comment: Omarchy ARM64\n'
+  printf '  //%s\n' "$kernel"
+  printf '  comment: Kernel version: %s\n' "$kernel_version"
+  printf '  protocol: efi\n'
+  printf '  path: boot():/%s\n' "$uki_relative"
+  printf '  cmdline: %s\n' "$cmdline"
+  printf '### END OMARCHY ARM ENTRY ###\n'
+} >"$limine_conf"
+'''
+
+
+def _install_arm_limine_updater(ctx: InstallContext) -> None:
+    updater = ctx.target / "usr" / "local" / "bin" / "omarchy-arm-limine-update"
+    updater.parent.mkdir(parents=True, exist_ok=True)
+    updater.write_text(ARM_LIMINE_UPDATE_SCRIPT)
+    updater.chmod(0o755)
+
+    hook = ctx.target / "etc" / "pacman.d" / "hooks" / "95-omarchy-arm-limine.hook"
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text(
+        textwrap.dedent(
+            """\
+            [Trigger]
+            Operation = Install
+            Operation = Upgrade
+            Type = Package
+            Target = linux-aarch64
+
+            [Action]
+            Description = Rebuilding the Omarchy ARM64 boot entry...
+            When = PostTransaction
+            Exec = /usr/local/bin/omarchy-arm-limine-update
+            """
+        )
+    )
 
 
 def _strip_shell_quotes(value: str) -> str:
@@ -1387,6 +1655,57 @@ def configure_dns_resolver(ctx: InstallContext) -> None:
     resolv_conf.parent.mkdir(parents=True, exist_ok=True)
     resolv_conf.unlink(missing_ok=True)
     resolv_conf.symlink_to(target)
+
+
+def configure_arm_package_repository(ctx: InstallContext) -> None:
+    """Keep a generic ARM install on its verified ARM package inputs.
+
+    The normal Omarchy finalizer installs the default x86_64 online pacman
+    configuration. An ARM ISO carries this marker and replacement explicitly;
+    x86_64 media has neither and returns without changing the target.
+    """
+    media_root = Path(os.environ.get("OMARCHY_ISO_MEDIA_ROOT", "/usr/share/omarchy-iso"))
+    repository_record = media_root / "arm-repository"
+    runtime_record = media_root / "arm-runtime"
+    pacman_config = media_root / "pacman-online-installed-arm.conf"
+    public_key = media_root / "omarchy-arm-repository.asc"
+
+    if not repository_record.exists():
+        return
+    for required in (runtime_record, pacman_config, public_key):
+        if not required.is_file():
+            raise RuntimeError(f"ARM package input is missing: {required}")
+
+    target_state = ctx.target / "var/lib/omarchy/package-snapshots"
+    target_state.mkdir(parents=True, exist_ok=True)
+    shutil.copy(repository_record, target_state / "ARM-REPOSITORY")
+    shutil.copy(runtime_record, target_state / "ARM-RUNTIME")
+
+    target_key = ctx.target / "usr/share/omarchy/omarchy-arm-repository.asc"
+    target_key.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(public_key, target_key)
+    shutil.copy(pacman_config, ctx.target / "etc/pacman.conf")
+
+    subprocess.run(
+        [
+            "arch-chroot",
+            str(ctx.target),
+            "pacman-key",
+            "--add",
+            "/usr/share/omarchy/omarchy-arm-repository.asc",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "arch-chroot",
+            str(ctx.target),
+            "pacman-key",
+            "--lsign-key",
+            "C81AC3E2A99556F9B21D5FEA3DD49BC9F8360BDC",
+        ],
+        check=True,
+    )
 
 
 def _read_omarchy_mirror() -> str:
@@ -1656,8 +1975,26 @@ def validate_boot(ctx: InstallContext) -> None:
     if "Omarchy" not in limine_conf_text:
         raise RuntimeError(f"{limine_conf} has no Omarchy entry")
 
-    if ctx.encrypt and "cryptdevice=" not in limine_conf_text:
-        raise RuntimeError(f"Encrypted install but {limine_conf} has no cryptdevice=")
+    encryption_parameter = "rd.luks.name=" if _is_arm_machine() else "cryptdevice="
+    if ctx.encrypt and encryption_parameter not in limine_conf_text:
+        raise RuntimeError(
+            f"Encrypted install but {limine_conf} has no {encryption_parameter}"
+        )
+    if ctx.encrypt and _is_arm_machine():
+        encryption_hooks = (
+            ctx.target
+            / "etc"
+            / "mkinitcpio.conf.d"
+            / "90-omarchy-arm-encryption.conf"
+        )
+        if not encryption_hooks.exists() or "sd-encrypt" not in encryption_hooks.read_text():
+            raise RuntimeError(f"Encrypted ARM install but {encryption_hooks} is missing")
+        if "console=tty0" not in limine_conf_text:
+            raise RuntimeError(f"Encrypted ARM install but {limine_conf} has no graphical console")
+        if "plymouth.ignore-serial-consoles" not in limine_conf_text:
+            raise RuntimeError(
+                f"Encrypted ARM install but {limine_conf} may suppress Plymouth for serial"
+            )
 
     kernel_cmdline = ctx.target / "etc" / "kernel" / "cmdline"
     if not kernel_cmdline.exists():
@@ -1669,7 +2006,7 @@ def validate_boot(ctx: InstallContext) -> None:
     kernel = storage.get("kernel") or (ctx.user_configuration.get("kernels") or ["linux"])[0]
 
     if arch.has_uefi():
-        limine_binary = esp_mount / boot.get("esp_path", "/EFI/limine").lstrip("/") / boot.get("efi_binary", "limine_x64.efi")
+        limine_binary = esp_mount / boot.get("esp_path", "/EFI/limine").lstrip("/") / boot.get("efi_binary", _limine_efi_names()[1])
         if not limine_binary.exists() or limine_binary.stat().st_size == 0:
             raise RuntimeError(f"{limine_binary} missing or empty")
 
@@ -1714,8 +2051,12 @@ def _validate_provisioning_state(ctx: InstallContext) -> None:
         limine_conf_text = (
             ctx.target / _boot_intent(ctx)["esp_mount"].lstrip("/") / "limine.conf"
         ).read_text()
-        if "cryptkey=rootfs:" not in limine_conf_text:
-            raise RuntimeError("encrypted deferred-provisioning install but limine.conf has no cryptkey= for auto-unlock")
+        key_parameter = "rd.luks.key=" if _is_arm_machine() else "cryptkey=rootfs:"
+        if key_parameter not in limine_conf_text:
+            raise RuntimeError(
+                "encrypted deferred-provisioning install but limine.conf has no "
+                f"{key_parameter} for auto-unlock"
+            )
 
 
 def _assert_boot_hooks_restored(ctx: InstallContext) -> None:
