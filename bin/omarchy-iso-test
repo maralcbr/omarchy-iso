@@ -687,6 +687,13 @@ emojis|meta_l-ctrl-e|omarchy-emojis|omarchy.emojis
 clipboard|meta_l-ctrl-v|omarchy-clipboard|omarchy.clipboard
 audio-panel|meta_l-ctrl-a|omarchy-keyboard-panel|omarchy.audio'
 
+  wait_for_guest_state "shell responds before shortcut checks" 60 \
+    ssh_session "omarchy-shell shell ping"
+  # Hyprland becomes reachable before the heavier launcher and menu models
+  # finish their first-session startup on ARM. Let those surfaces settle so a
+  # keybinding timeout measures the binding rather than session initialization.
+  sleep 30
+
   cleanup_shortcut_state
   while IFS='|' read -r name chord namespace plugin; do
     if ! verify_surface_shortcut "$name" "$chord" "$namespace" "$plugin"; then
