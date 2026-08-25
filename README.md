@@ -18,6 +18,11 @@ Corruption anywhere in the ISO is worth catching before the write, and corruptio
 
 Run `./bin/omarchy-iso-make`; output goes into `./release`. By default the ISO uses the Omarchy packages and tracks the `quattro` branch, from the stable mirror. Pass `--edge` to use `omarchy-dev` and `omarchy-settings-dev` from the edge mirror.
 
+The build defaults to `x86_64`. Pass `--arch aarch64` to select the generic
+UEFI ARM64 build path. Architecture selection alone does not make an Apple
+Silicon image; Apple boot policy and Asahi platform integration are outside the
+generic media target.
+
 For local development, build the ISO from sibling checkouts:
 
 ```bash
