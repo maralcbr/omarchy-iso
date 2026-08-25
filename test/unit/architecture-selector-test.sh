@@ -76,4 +76,13 @@ set -e
 (( invalid_status != 0 ))
 [[ $invalid_output == *"Unsupported architecture: sparc"* ]]
 
+set +e
+unsupported_output=$(HOME="$work/home" PATH="$work/bin:$PATH" \
+  "$ROOT/bin/omarchy-iso-make" --arch aarch64 --edge --keep-pkg-cache --no-boot-offer 2>&1)
+unsupported_status=$?
+set -e
+
+(( unsupported_status != 0 ))
+[[ $unsupported_output == *"requires the pinned quattro/stable package snapshots"* ]]
+
 echo "Architecture selector tests passed"

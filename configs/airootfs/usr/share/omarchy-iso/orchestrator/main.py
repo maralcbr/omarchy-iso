@@ -41,6 +41,7 @@ def build_phases(ctx: InstallContext):
         configure_login,
         configure_ssh_access,
         configure_tailscale,
+        configure_arm_package_repository,
         validate_boot,
         create_factory_snapshot,
     )
@@ -60,6 +61,7 @@ def build_phases(ctx: InstallContext):
         ("Configuring SSH access",     configure_ssh_access),
         ("Configuring Tailscale",      configure_tailscale),
         ("Configuring DNS resolver",   configure_dns_resolver),
+        ("Configuring package repository", configure_arm_package_repository),
         ("Validating boot setup",      validate_boot),
         ("Creating factory snapshot",  create_factory_snapshot),
     ]

@@ -1389,6 +1389,57 @@ def configure_dns_resolver(ctx: InstallContext) -> None:
     resolv_conf.symlink_to(target)
 
 
+def configure_arm_package_repository(ctx: InstallContext) -> None:
+    """Keep a generic ARM install on its verified ARM package inputs.
+
+    The normal Omarchy finalizer installs the default x86_64 online pacman
+    configuration. An ARM ISO carries this marker and replacement explicitly;
+    x86_64 media has neither and returns without changing the target.
+    """
+    media_root = Path(os.environ.get("OMARCHY_ISO_MEDIA_ROOT", "/usr/share/omarchy-iso"))
+    repository_record = media_root / "arm-repository"
+    runtime_record = media_root / "arm-runtime"
+    pacman_config = media_root / "pacman-online-installed-arm.conf"
+    public_key = media_root / "omarchy-arm-repository.asc"
+
+    if not repository_record.exists():
+        return
+    for required in (runtime_record, pacman_config, public_key):
+        if not required.is_file():
+            raise RuntimeError(f"ARM package input is missing: {required}")
+
+    target_state = ctx.target / "var/lib/omarchy/package-snapshots"
+    target_state.mkdir(parents=True, exist_ok=True)
+    shutil.copy(repository_record, target_state / "ARM-REPOSITORY")
+    shutil.copy(runtime_record, target_state / "ARM-RUNTIME")
+
+    target_key = ctx.target / "usr/share/omarchy/omarchy-arm-repository.asc"
+    target_key.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(public_key, target_key)
+    shutil.copy(pacman_config, ctx.target / "etc/pacman.conf")
+
+    subprocess.run(
+        [
+            "arch-chroot",
+            str(ctx.target),
+            "pacman-key",
+            "--add",
+            "/usr/share/omarchy/omarchy-arm-repository.asc",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "arch-chroot",
+            str(ctx.target),
+            "pacman-key",
+            "--lsign-key",
+            "C81AC3E2A99556F9B21D5FEA3DD49BC9F8360BDC",
+        ],
+        check=True,
+    )
+
+
 def _read_omarchy_mirror() -> str:
     p = Path("/root/omarchy_mirror")
     return p.read_text().strip() if p.exists() else "stable"

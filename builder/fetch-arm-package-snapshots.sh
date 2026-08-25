@@ -37,7 +37,8 @@ verify_signature() {
   local gnupg_home="$5"
   local signature_status valid_fingerprint
 
-  mkdir -m 0700 "$gnupg_home"
+  mkdir -p "$gnupg_home"
+  chmod 0700 "$gnupg_home"
   GNUPGHOME="$gnupg_home" gpg --batch --import "$key" >/dev/null 2>&1
   signature_status=$(GNUPGHOME="$gnupg_home" gpg --batch --status-fd 1 \
     --verify "$signature" "$payload" 2>/dev/null)
@@ -51,6 +52,7 @@ verify_package_record() {
   local signer="$3"
   local record="$4"
   local signature_checksum=${5:-}
+  local gnupg_home="$6"
   local index package version architecture filename checksum signature signature_path
 
   IFS='|' read -r index package version architecture filename checksum signature _ <<<"$record"
@@ -73,7 +75,7 @@ verify_package_record() {
     [[ $(sha256sum "$signature_path" | cut -d' ' -f1) == "$signature_checksum" ]]
   fi
   verify_signature "$key" "$signature_path" "$work/$filename" "$signer" \
-    "$work/gnupg-package-$release-$index"
+    "$gnupg_home"
 
   install -m 0644 "$work/$filename" "$destination/$filename"
   install -m 0644 "$signature_path" "$destination/$signature"
@@ -96,7 +98,8 @@ grep -Fxq 'package_count=21' "$work/CANDIDATE"
 while IFS= read -r record; do
   IFS='|' read -r _ _ _ _ _ _ _ signature_checksum <<<"$record"
   verify_package_record "$ARM_REPOSITORY_RELEASE" "$builder_root/omarchy-arm-repository.asc" \
-    "$ARM_REPOSITORY_SIGNING_FINGERPRINT" "$record" "$signature_checksum"
+    "$ARM_REPOSITORY_SIGNING_FINGERPRINT" "$record" "$signature_checksum" \
+    "$work/gnupg-repository"
 done < <(sed -n 's/^package=//p' "$work/CANDIDATE")
 
 runtime_url="$repository_base/$ARM_RUNTIME_RELEASE"
@@ -113,8 +116,13 @@ grep -Fxq 'package_count=6' "$work/runtime.manifest"
 
 while IFS= read -r record; do
   verify_package_record "$ARM_RUNTIME_RELEASE" "$builder_root/omarchy-arm-runtime.asc" \
-    "$ARM_RUNTIME_SIGNING_FINGERPRINT" "$record"
+    "$ARM_RUNTIME_SIGNING_FINGERPRINT" "$record" "" "$work/gnupg-runtime"
 done < <(sed -n 's/^package=//p' "$work/runtime.manifest")
 
 install -m 0644 "$work/CANDIDATE" "$destination/ARM-REPOSITORY"
 install -m 0644 "$work/runtime.manifest" "$destination/ARM-RUNTIME"
+{
+  sed -n 's/^package=//p' "$work/CANDIDATE"
+  sed -n 's/^package=//p' "$work/runtime.manifest"
+} | cut -d'|' -f5 >"$destination/ARM-PACKAGES"
+(( $(wc -l <"$destination/ARM-PACKAGES") == 27 ))
