@@ -56,6 +56,8 @@ grep -Fq 'required_grubmodules=(configfile iso9660 linux normal search search_fs
   "$ROOT/builder/archiso-aarch64.patch"
 grep -Fq 'patch --forward --silent "${MKARCHISO[0]}" /builder/archiso-aarch64.patch' \
   "$ROOT/builder/build-iso.sh"
+grep -Fq 'printf '\''%s\n'\'' archlinuxarm-keyring >>"$shipped_base_packages"' \
+  "$ROOT/builder/build-iso.sh"
 
 profile_values=$(
   export OMARCHY_ARCH=aarch64 SOURCE_DATE_EPOCH=0

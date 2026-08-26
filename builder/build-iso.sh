@@ -226,6 +226,9 @@ shipped_base_packages="$build_cache_dir/airootfs/usr/share/omarchy-iso/omarchy-b
 shipped_other_packages="$build_cache_dir/airootfs/usr/share/omarchy-iso/omarchy-other.packages"
 filter_target_packages <"${base_pkg_lists[0]}" >"$shipped_base_packages"
 filter_target_packages <"${base_pkg_lists[1]}" >"$shipped_other_packages"
+if [[ $OMARCHY_ARCH == "aarch64" ]] && ! grep -Fxq archlinuxarm-keyring "$shipped_base_packages"; then
+  printf '%s\n' archlinuxarm-keyring >>"$shipped_base_packages"
+fi
 base_pkg_lists=("$shipped_base_packages" "$shipped_other_packages")
 
 # The configurator's setup form comes from the runtime this ISO bundles, so the
