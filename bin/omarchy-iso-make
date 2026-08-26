@@ -7,14 +7,27 @@ KEEP_PKG_CACHE=""
 LOCAL_OMARCHY_PATH=""
 LOCAL_PKGS_PATH=""
 OMARCHY_ARCH="x86_64"
+OMARCHY_ARCH_EXPLICIT=0
+OMARCHY_MEDIA_TARGET=""
+OMARCHY_APPLE_MEDIA_BUILD_PROBE=0
 while [[ $# -gt 0 ]]; do
   case $1 in
   --arch)
     OMARCHY_ARCH="${2:-}"
+    OMARCHY_ARCH_EXPLICIT=1
     shift 2
     ;;
   --arch=*)
     OMARCHY_ARCH="${1#*=}"
+    OMARCHY_ARCH_EXPLICIT=1
+    shift
+    ;;
+  --target)
+    OMARCHY_MEDIA_TARGET="${2:-}"
+    shift 2
+    ;;
+  --target=*)
+    OMARCHY_MEDIA_TARGET="${1#*=}"
     shift
     ;;
   --no-cache)
@@ -27,6 +40,10 @@ while [[ $# -gt 0 ]]; do
     ;;
   --no-boot-offer)
     NO_BOOT_OFFER=1
+    shift
+    ;;
+  --apple-media-validation-build)
+    OMARCHY_APPLE_MEDIA_BUILD_PROBE=1
     shift
     ;;
   --debug)
@@ -66,11 +83,58 @@ while [[ $# -gt 0 ]]; do
     ;;
   *)
     echo "Unknown option: $1"
-    echo "Usage: $0 [--arch x86_64|aarch64] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>]"
+    echo "Usage: $0 [--arch x86_64|aarch64] [--target x86_64/pc|aarch64/generic|aarch64/apple-silicon] [--apple-media-validation-build] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>]"
     exit 1
     ;;
   esac
 done
+
+case "$OMARCHY_ARCH" in
+  x86_64|aarch64) ;;
+  *)
+    echo "Unsupported architecture: $OMARCHY_ARCH" >&2
+    echo "Supported architectures: x86_64, aarch64" >&2
+    exit 1
+    ;;
+esac
+
+if [[ -n $OMARCHY_MEDIA_TARGET ]]; then
+  target_arch=${OMARCHY_MEDIA_TARGET%%/*}
+  if (( OMARCHY_ARCH_EXPLICIT )) && [[ $target_arch != "$OMARCHY_ARCH" ]]; then
+    echo "Architecture $OMARCHY_ARCH conflicts with media target $OMARCHY_MEDIA_TARGET" >&2
+    exit 1
+  fi
+  OMARCHY_ARCH=$target_arch
+else
+  if [[ $OMARCHY_ARCH == "x86_64" ]]; then
+    OMARCHY_MEDIA_TARGET=x86_64/pc
+  else
+    OMARCHY_MEDIA_TARGET=aarch64/generic
+  fi
+fi
+
+if (( OMARCHY_APPLE_MEDIA_BUILD_PROBE )) && [[ $OMARCHY_MEDIA_TARGET != "aarch64/apple-silicon" ]]; then
+  echo "--apple-media-validation-build requires --target aarch64/apple-silicon" >&2
+  exit 1
+fi
+
+case "$OMARCHY_MEDIA_TARGET" in
+  x86_64/pc|aarch64/generic) ;;
+  aarch64/apple-silicon)
+    if (( ! OMARCHY_APPLE_MEDIA_BUILD_PROBE )); then
+      echo "The aarch64/apple-silicon media target is defined but not buildable yet." >&2
+      echo "The pinned Asahi live profile exists, but disposable ISO build/boot and BOOTAA64.EFI compatibility evidence are still missing." >&2
+      echo "Refusing to substitute the generic aarch64 media target." >&2
+      exit 1
+    fi
+    echo "Building an unverified Apple media validation artifact; release use is forbidden." >&2
+    ;;
+  *)
+    echo "Unsupported media target: $OMARCHY_MEDIA_TARGET" >&2
+    echo "Supported targets: x86_64/pc, aarch64/generic, aarch64/apple-silicon" >&2
+    exit 1
+    ;;
+esac
 
 case "$OMARCHY_ARCH" in
   x86_64)
@@ -159,6 +223,8 @@ DOCKER_ARGS=(
   -e "OMARCHY_ISO_REF=$OMARCHY_ISO_REF"
   -e "OMARCHY_MIRROR=$OMARCHY_MIRROR"
   -e "OMARCHY_ARCH=$OMARCHY_ARCH"
+  -e "OMARCHY_MEDIA_TARGET=$OMARCHY_MEDIA_TARGET"
+  -e "OMARCHY_APPLE_MEDIA_BUILD_PROBE=$OMARCHY_APPLE_MEDIA_BUILD_PROBE"
   -e "OMARCHY_INSTALL_DEBUG=${OMARCHY_INSTALL_DEBUG:-}"
   -e "HOST_UID=$(id -u)"
   -e "HOST_GID=$(id -g)"
@@ -185,6 +251,7 @@ fi
 if [[ -z "$NO_CACHE" ]]; then
   cache_scope="iso_${OMARCHY_MIRROR}"
   [[ $OMARCHY_ARCH == "x86_64" ]] || cache_scope+="_${OMARCHY_ARCH}"
+  [[ $OMARCHY_MEDIA_TARGET != "aarch64/apple-silicon" ]] || cache_scope+="_apple_silicon"
   OFFLINE_REPO_BUILD_CACHE_DIR="$HOME/.cache/omarchy/$cache_scope/airootfs/var/cache/omarchy"
   mkdir -p "$OFFLINE_REPO_BUILD_CACHE_DIR"
   DOCKER_ARGS+=(-v "$OFFLINE_REPO_BUILD_CACHE_DIR:/var/cache/airootfs/var/cache/omarchy")
@@ -198,7 +265,13 @@ docker run "${BUILD_PLATFORM_ARGS[@]}" "${DOCKER_ARGS[@]}" "$BUILD_IMAGE" /$BUIL
 
 latest_iso=$(\ls -t "$BUILD_RELEASE_PATH"/*-"$OMARCHY_ARCH".iso | head -n1)
 iso_ref="${latest_iso%.*}-$OMARCHY_ISO_REF.iso"
+if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
+  iso_ref="${latest_iso%.*}-apple-silicon-$OMARCHY_ISO_REF.iso"
+fi
 mv -f "$latest_iso" "$iso_ref"
+if [[ -f $latest_iso.apple-media-evidence.json ]]; then
+  mv -f "$latest_iso.apple-media-evidence.json" "$iso_ref.apple-media-evidence.json"
+fi
 
 if [[ -z "${NO_BOOT_OFFER:-}" ]]; then
   echo
