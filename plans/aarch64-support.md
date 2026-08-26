@@ -237,3 +237,54 @@ not implied or required by this VM-specific gate.
 
 This evidence covers generic ARM64 QEMU/HVF VM behavior only. It is not
 physical Apple-hardware acceptance, and the ISO remains unpublished.
+
+### 4.0.1 acceptance evidence (2026-08-26 UTC)
+
+- The accepted Phase 3 baseline is
+  `1823960c6772179d6878d9bc3938f7f94f0c0fa1` from the remote
+  `phase-3-arch-selector` branch. The previous `85d0bb4` checkpoint is
+  divergent from that commit and was not used.
+- ISO pin and build source commit:
+  `563439fdf8b1c04d371b24bcd362b468c4dc1645`.
+- Runtime source commit: `15432eb5419bb904d51ca6f4fd43b407b9bac935`.
+  The source release tag `v4.0.1-mac.1` points to the later documentation-only
+  commit `a7da35e08462e09529fab28e90dbc72eae659827`; no runtime file differs.
+- Package candidate:
+  `asahi-packages-candidate-009293b616cf87677484b8670e93edfa815a7f8e`,
+  descriptor SHA-256
+  `97f0a6ea7bd57890db0b46e1a663c687b16310a04daac0533af14e50de1e0349`.
+  Runtime manifest SHA-256:
+  `0e3b49f0133e3833c8b2b7aad89728028a8db8581743155875e91d77bac99451`.
+  Repository manifest SHA-256: the candidate `SHA256SUMS` asset is
+  `90808b662430856c58fa809cdacbc0d901b16d9e12dbe30c22ea79ca9e51dc10`.
+- The exact accepted assets were promoted without rebuilding as
+  `asahi-packages-stable-009293b616cf87677484b8670e93edfa815a7f8e`.
+  Immutable release readback and byte-for-byte inventory comparison passed.
+- Unpublished ISO: `omarchy-2026.08.26-aarch64-quattro.iso`, SHA-256
+  `aac9b1297240c61d8c96a3f1c60026911992f6941d2269e8597798f21d4fa96d`.
+  It was built once inside the native aarch64 `phase3-arm-build` Lima VM on
+  the M4 Pro using rootful Docker, 10 vCPUs, and 24 GiB RAM. Host-side Bash,
+  GNU grep, mount-namespace, and rootless-Docker preflight failures produced
+  no ISO before the isolated rootful build completed.
+- Fresh encrypted install, reboot, and the full encrypted headless suite
+  passed against that exact ISO. The accepted run is
+  `/Users/maralc/omarchy-v4.0.1-arm64-acceptance-20260826/omarchy-iso/test-runs/omarchy-2026.08.26-aarch64-quattro-encrypted/runs/20260826-104912`
+  on the M4. The suite passed all acceptance files in 68 seconds and retained
+  71 screenshots.
+- A separate fresh installed base from the same ISO was booted with QEMU
+  11.1.0, HVF, 10 vCPUs, 12 GiB RAM, UEFI, `virtio-gpu-pci`, and the Cocoa
+  display. `frames/frame-12.png` shows the graphical Omarchy Plymouth LUKS
+  field. After entry through the emulated USB keyboard,
+  `after-unlock-10s.png` shows the Omarchy desktop. SDDM, `graphical.target`,
+  Hyprland, and Quickshell were active; Node reported `v26.7.0` on aarch64;
+  and no system or user units were failed. Evidence is under
+  `/Users/maralc/omarchy-v4.0.1-arm64-acceptance-20260826/evidence/graphical-reboot`.
+- The installed command line retained
+  `splash console=tty0 plymouth.ignore-serial-consoles`; the initramfs drop-in
+  retained `plymouth` plus `sd-encrypt`; and the Plymouth theme was `omarchy`.
+- M4 host-protection fingerprints were unchanged. The active Omarchy system
+  was not updated or rebooted.
+
+This remains generic ARM64 QEMU/HVF VM acceptance. The replacement ISO is
+accepted but unpublished, and no public ISO channel has been advanced pending
+explicit publication authorization.
