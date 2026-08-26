@@ -1,0 +1,148 @@
+#!/bin/bash
+
+set -euo pipefail
+
+usage() {
+  echo "Usage: omarchy-iso-manifest --sequence N --version VERSION --source-commit SHA --package-snapshot FILE --media-evidence FILE ISO" >&2
+}
+
+sequence=""
+version=""
+source_commit=""
+package_snapshot=""
+media_evidence=""
+
+while (( $# > 0 )); do
+  case "$1" in
+    --sequence)
+      sequence="${2:-}"
+      shift 2
+      ;;
+    --version)
+      version="${2:-}"
+      shift 2
+      ;;
+    --source-commit)
+      source_commit="${2:-}"
+      shift 2
+      ;;
+    --package-snapshot)
+      package_snapshot="${2:-}"
+      shift 2
+      ;;
+    --media-evidence)
+      media_evidence="${2:-}"
+      shift 2
+      ;;
+    --*)
+      usage
+      exit 1
+      ;;
+    *)
+      if [[ -n ${iso:-} ]]; then
+        usage
+        exit 1
+      fi
+      iso="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z ${iso:-} || -z $sequence || -z $version || -z $source_commit || -z $package_snapshot || -z $media_evidence ]]; then
+  usage
+  exit 1
+fi
+
+if [[ ! $sequence =~ ^[1-9][0-9]*$ ]] || (( sequence > 2147483647 )); then
+  echo "Sequence must be an integer from 1 through 2147483647" >&2
+  exit 1
+fi
+if [[ ! $version =~ ^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$ ]]; then
+  echo "Version contains unsupported characters or is too long: $version" >&2
+  exit 1
+fi
+if [[ ! $source_commit =~ ^[0-9a-f]{40}$ ]]; then
+  echo "Source commit must be a full lowercase 40-character Git object ID" >&2
+  exit 1
+fi
+if [[ ! -f $iso ]]; then
+  echo "ISO not found: $iso" >&2
+  exit 1
+fi
+if [[ ! -f $package_snapshot ]]; then
+  echo "Apple platform package snapshot not found: $package_snapshot" >&2
+  exit 1
+fi
+if [[ ! -f $media_evidence ]]; then
+  echo "Apple media evidence not found: $media_evidence" >&2
+  exit 1
+fi
+
+root=$(cd -- "${BASH_SOURCE[0]%/*}/.." && pwd)
+"$root/builder/validate-apple-platform-snapshot.sh" "$package_snapshot" >/dev/null
+"$root/builder/validate-apple-media-evidence.sh" "$media_evidence" "$iso" "$package_snapshot"
+
+iso_name=${iso##*/}
+iso_size=$(stat -c '%s' -- "$iso")
+iso_sha256=$(sha256sum -- "$iso")
+iso_sha256=${iso_sha256%% *}
+snapshot_name=${package_snapshot##*/}
+snapshot_sha256=$(sha256sum -- "$package_snapshot")
+snapshot_sha256=${snapshot_sha256%% *}
+evidence_name=${media_evidence##*/}
+evidence_sha256=$(sha256sum -- "$media_evidence")
+evidence_sha256=${evidence_sha256%% *}
+manifest="$iso.manifest.json"
+temporary=$(mktemp "${manifest}.tmp.XXXXXX")
+trap 'rm -f "$temporary"' EXIT
+
+jq -n -S \
+  --argjson sequence "$sequence" \
+  --arg version "$version" \
+  --arg source_commit "$source_commit" \
+  --arg iso_name "$iso_name" \
+  --argjson iso_size "$iso_size" \
+  --arg iso_sha256 "$iso_sha256" \
+  --arg snapshot_name "$snapshot_name" \
+  --arg snapshot_sha256 "$snapshot_sha256" \
+  --arg evidence_name "$evidence_name" \
+  --arg evidence_sha256 "$evidence_sha256" '
+  {
+    schema_version: 1,
+    sequence: $sequence,
+    release: {
+      version: $version,
+      source_commit: $source_commit
+    },
+    target: {
+      architecture: "aarch64",
+      platform: "apple-silicon",
+      media_target: "aarch64/apple-silicon",
+      boot_backend: "asahi-grub",
+      artifact_kind: "iso"
+    },
+    artifact: {
+      filename: $iso_name,
+      size: $iso_size,
+      sha256: $iso_sha256
+    },
+    package_snapshot: {
+      schema_version: 1,
+      filename: $snapshot_name,
+      sha256: $snapshot_sha256
+    },
+    media_validation: {
+      filename: $evidence_name,
+      sha256: $evidence_sha256,
+      verification_kind: "static-apple-media",
+      boot_verified: false,
+      blocker: "disposable-asahi-boot-evidence-absent"
+    }
+  }
+' >"$temporary"
+
+chmod 644 "$temporary"
+mv -f -- "$temporary" "$manifest"
+trap - EXIT
+printf '%s\n' "$manifest"

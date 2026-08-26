@@ -135,6 +135,79 @@ for suffix in "" ".sig" ".sha256"; do
 done
 pass "upload ships the ISO, its signature and its checksum, path spaces intact"
 
+cat >"$upload_iso.manifest.json" <<'EOF'
+{"target":{"media_target":"aarch64/apple-silicon"},"media_validation":{"boot_verified":false}}
+EOF
+printf 'manifest signature\n' >"$upload_iso.manifest.json.sig"
+printf '{"static_evidence":true}\n' >"$upload_iso.apple-media-evidence.json"
+set +e
+run_upload "$upload_iso"
+upload_status=$?
+set -e
+(( upload_status != 0 )) ||
+  fail "upload rejects a static-only Apple validation artifact"
+[[ ! -s $work/rclone-log ]] ||
+  fail "Apple release eligibility is checked before any upload" "$(cat "$work/rclone-log")"
+grep -qF "before boot, physical-preview, and publication gates pass" "$work/upload-err" ||
+  fail "upload explains the closed Apple release gates" "$(cat "$work/upload-err")"
+pass "static Apple media evidence cannot enter the public upload path"
+
+apple_named_iso="$work/release builds/omarchy-9.9.9-aarch64-apple-silicon-quattro.iso"
+cp "$upload_iso" "$apple_named_iso"
+printf '{}\n' >"$apple_named_iso.manifest.json"
+printf 'manifest signature\n' >"$apple_named_iso.manifest.json.sig"
+printf '{"static_evidence":true}\n' >"$apple_named_iso.apple-media-evidence.json"
+set +e
+run_upload "$apple_named_iso"
+upload_status=$?
+set -e
+(( upload_status != 0 )) ||
+  fail "upload accepts an Apple-named ISO with a malformed target manifest"
+[[ ! -s $work/rclone-log ]] ||
+  fail "Apple target identity is checked before any upload" "$(cat "$work/rclone-log")"
+grep -qF "malformed or mistargeted Apple manifest" "$work/upload-err" ||
+  fail "upload explains the malformed Apple target" "$(cat "$work/upload-err")"
+pass "Apple artifact naming cannot bypass exact target validation"
+
+cat >"$upload_iso.manifest.json" <<'EOF'
+{"target":{"media_target":"aarch64/apple-silicon"},"media_validation":{"boot_verified":true},"release_eligibility":{"physical_preview_gate":true,"publication_authorized":true}}
+EOF
+rm "$upload_iso.apple-media-evidence.json"
+set +e
+run_upload "$upload_iso"
+upload_status=$?
+set -e
+(( upload_status != 0 )) ||
+  fail "upload rejects an Apple manifest without media evidence"
+[[ ! -s $work/rclone-log ]] ||
+  fail "media-evidence preflight runs before any upload" "$(cat "$work/rclone-log")"
+grep -qF "without its media evidence" "$work/upload-err" ||
+  fail "upload explains the missing media evidence" "$(cat "$work/upload-err")"
+pass "an Apple manifest requires its exact media-evidence object"
+
+printf '{"manifest":true}\n' >"$upload_iso.manifest.json"
+run_upload "$upload_iso"
+for suffix in ".manifest.json" ".manifest.json.sig"; do
+  grep -qxF "rclone|copy|$upload_iso$suffix|Omarchy:omarchy/|-P" "$work/rclone-log" ||
+    fail "upload ships the signed manifest pair" "$(cat "$work/rclone-log")"
+done
+pass "upload ships the signed manifest pair"
+
+rm "$upload_iso.manifest.json.sig"
+set +e
+run_upload "$upload_iso"
+upload_status=$?
+set -e
+(( upload_status != 0 )) ||
+  fail "upload rejects an incomplete manifest pair"
+[[ ! -s $work/rclone-log ]] ||
+  fail "manifest-pair preflight runs before any upload" "$(cat "$work/rclone-log")"
+grep -qF "incomplete manifest pair" "$work/upload-err" ||
+  fail "upload explains the incomplete manifest pair" "$(cat "$work/upload-err")"
+pass "an incomplete manifest pair stops before any upload"
+
+rm "$upload_iso.manifest.json"
+
 rm "$upload_iso.sig"
 run_upload "$upload_iso"
 

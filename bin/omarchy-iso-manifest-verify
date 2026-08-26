@@ -1,0 +1,277 @@
+#!/bin/bash
+
+set -euo pipefail
+
+usage() {
+  echo "Usage: omarchy-iso-manifest-verify --keyring FILE --state FILE --package-snapshot FILE --media-evidence FILE [--signature FILE] [--commit-state] MANIFEST ISO" >&2
+}
+
+keyring=""
+state=""
+package_snapshot=""
+media_evidence=""
+signature=""
+commit_state=0
+positional=()
+
+while (( $# > 0 )); do
+  case "$1" in
+    --keyring)
+      keyring="${2:-}"
+      shift 2
+      ;;
+    --state)
+      state="${2:-}"
+      shift 2
+      ;;
+    --package-snapshot)
+      package_snapshot="${2:-}"
+      shift 2
+      ;;
+    --media-evidence)
+      media_evidence="${2:-}"
+      shift 2
+      ;;
+    --signature)
+      signature="${2:-}"
+      shift 2
+      ;;
+    --commit-state)
+      commit_state=1
+      shift
+      ;;
+    --*)
+      usage
+      exit 1
+      ;;
+    *)
+      positional+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if (( ${#positional[@]} != 2 )) || [[ -z $keyring || -z $state || -z $package_snapshot || -z $media_evidence ]]; then
+  usage
+  exit 1
+fi
+
+manifest=${positional[0]}
+iso=${positional[1]}
+signature=${signature:-$manifest.sig}
+
+for required in "$manifest" "$iso" "$signature" "$keyring" "$package_snapshot" "$media_evidence"; do
+  if [[ ! -f $required ]]; then
+    echo "Required verification input not found: $required" >&2
+    exit 1
+  fi
+done
+
+if ! gpgv --keyring "$keyring" "$signature" "$manifest" >/dev/null 2>&1; then
+  echo "Manifest signature verification failed: $signature" >&2
+  exit 1
+fi
+
+canonical=$(mktemp)
+trap 'rm -f "$canonical"' EXIT
+python3 - "$manifest" >"$canonical" <<'PY'
+import json
+import sys
+
+
+def reject_duplicates(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON member: {key}")
+        result[key] = value
+    return result
+
+
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as stream:
+        document = json.load(stream, object_pairs_hook=reject_duplicates)
+except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
+    print(f"Invalid release manifest: {error}", file=sys.stderr)
+    raise SystemExit(1)
+
+json.dump(document, sys.stdout, ensure_ascii=False, indent=2, sort_keys=True)
+sys.stdout.write("\n")
+PY
+
+if ! cmp -s -- "$canonical" "$manifest"; then
+  echo "Release manifest is not canonical JSON" >&2
+  exit 1
+fi
+
+if ! jq -e '
+  keys == ["artifact", "media_validation", "package_snapshot", "release", "schema_version", "sequence", "target"] and
+  .schema_version == 1 and
+  (.sequence | type == "number" and floor == . and . >= 1 and . <= 2147483647) and
+  (.release | keys == ["source_commit", "version"]) and
+  (.release.version | type == "string" and test("^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$")) and
+  (.release.source_commit | type == "string" and test("^[0-9a-f]{40}$")) and
+  (.target | keys == ["architecture", "artifact_kind", "boot_backend", "media_target", "platform"]) and
+  .target == {
+    architecture: "aarch64",
+    artifact_kind: "iso",
+    boot_backend: "asahi-grub",
+    media_target: "aarch64/apple-silicon",
+    platform: "apple-silicon"
+  } and
+  (.artifact | keys == ["filename", "sha256", "size"]) and
+  (.artifact.filename | type == "string" and length > 0 and contains("/") == false) and
+  (.artifact.size | type == "number" and floor == . and . >= 0) and
+  (.artifact.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+  (.package_snapshot | keys == ["filename", "schema_version", "sha256"]) and
+  .package_snapshot.schema_version == 1 and
+  (.package_snapshot.filename | type == "string" and length > 0 and contains("/") == false) and
+  (.package_snapshot.sha256 | type == "string" and test("^[0-9a-f]{64}$"))
+  and (.media_validation | keys == ["blocker", "boot_verified", "filename", "sha256", "verification_kind"])
+  and .media_validation.verification_kind == "static-apple-media"
+  and .media_validation.boot_verified == false
+  and .media_validation.blocker == "disposable-asahi-boot-evidence-absent"
+  and (.media_validation.filename | type == "string" and length > 0 and contains("/") == false)
+  and (.media_validation.sha256 | type == "string" and test("^[0-9a-f]{64}$"))
+' "$manifest" >/dev/null; then
+  echo "Release manifest schema or Apple target identity is invalid" >&2
+  exit 1
+fi
+
+root=$(cd -- "${BASH_SOURCE[0]%/*}/.." && pwd)
+"$root/builder/validate-apple-platform-snapshot.sh" "$package_snapshot" >/dev/null
+"$root/builder/validate-apple-media-evidence.sh" "$media_evidence" "$iso" "$package_snapshot"
+
+expected_iso_name=$(jq -r '.artifact.filename' "$manifest")
+expected_iso_size=$(jq -r '.artifact.size' "$manifest")
+expected_iso_sha256=$(jq -r '.artifact.sha256' "$manifest")
+expected_snapshot_name=$(jq -r '.package_snapshot.filename' "$manifest")
+expected_snapshot_sha256=$(jq -r '.package_snapshot.sha256' "$manifest")
+
+actual_iso_name=${iso##*/}
+actual_iso_size=$(stat -c '%s' -- "$iso")
+actual_iso_sha256=$(sha256sum -- "$iso")
+actual_iso_sha256=${actual_iso_sha256%% *}
+actual_snapshot_name=${package_snapshot##*/}
+actual_snapshot_sha256=$(sha256sum -- "$package_snapshot")
+actual_snapshot_sha256=${actual_snapshot_sha256%% *}
+expected_evidence_name=$(jq -r '.media_validation.filename' "$manifest")
+expected_evidence_sha256=$(jq -r '.media_validation.sha256' "$manifest")
+actual_evidence_name=${media_evidence##*/}
+actual_evidence_sha256=$(sha256sum -- "$media_evidence")
+actual_evidence_sha256=${actual_evidence_sha256%% *}
+
+if [[ $actual_iso_name != "$expected_iso_name" || $actual_iso_size != "$expected_iso_size" || $actual_iso_sha256 != "$expected_iso_sha256" ]]; then
+  echo "ISO bytes do not match the signed release manifest" >&2
+  exit 1
+fi
+if [[ $actual_evidence_name != "$expected_evidence_name" || $actual_evidence_sha256 != "$expected_evidence_sha256" ]]; then
+  echo "Apple media evidence does not match the signed release manifest" >&2
+  exit 1
+fi
+if [[ $actual_snapshot_name != "$expected_snapshot_name" || $actual_snapshot_sha256 != "$expected_snapshot_sha256" ]]; then
+  echo "Apple platform snapshot does not match the signed release manifest" >&2
+  exit 1
+fi
+
+manifest_sequence=$(jq -r '.sequence' "$manifest")
+manifest_sha256=$(sha256sum -- "$manifest")
+manifest_sha256=${manifest_sha256%% *}
+
+check_state() {
+  [[ -e $state ]] || return 0
+  if [[ ! -f $state ]]; then
+    echo "Anti-rollback state is not a regular file: $state" >&2
+    return 1
+  fi
+  local state_canonical
+  state_canonical=$(mktemp)
+  if ! python3 - "$state" >"$state_canonical" <<'PY'
+import json
+import sys
+
+
+def reject_duplicates(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON member: {key}")
+        result[key] = value
+    return result
+
+
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as stream:
+        document = json.load(stream, object_pairs_hook=reject_duplicates)
+except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
+    print(f"Invalid anti-rollback state: {error}", file=sys.stderr)
+    raise SystemExit(1)
+
+json.dump(document, sys.stdout, ensure_ascii=False, indent=2, sort_keys=True)
+sys.stdout.write("\n")
+PY
+  then
+    rm -f "$state_canonical"
+    return 1
+  fi
+  if ! cmp -s -- "$state_canonical" "$state"; then
+    echo "Anti-rollback state is not canonical JSON: $state" >&2
+    rm -f "$state_canonical"
+    return 1
+  fi
+  rm -f "$state_canonical"
+  if ! jq -e '
+    keys == ["highest_sequence", "manifest_sha256", "schema_version", "target"] and
+    .schema_version == 1 and
+    .target == "aarch64/apple-silicon" and
+    (.highest_sequence | type == "number" and floor == . and . >= 1 and . <= 2147483647) and
+    (.manifest_sha256 | type == "string" and test("^[0-9a-f]{64}$"))
+  ' "$state" >/dev/null; then
+    echo "Anti-rollback state is invalid: $state" >&2
+    return 1
+  fi
+
+  local highest_sequence recorded_sha256
+  highest_sequence=$(jq -r '.highest_sequence' "$state")
+  recorded_sha256=$(jq -r '.manifest_sha256' "$state")
+  if (( manifest_sequence < highest_sequence )); then
+    echo "Release sequence $manifest_sequence is older than trusted sequence $highest_sequence" >&2
+    return 1
+  fi
+  if (( manifest_sequence == highest_sequence )) && [[ $manifest_sha256 != "$recorded_sha256" ]]; then
+    echo "Release sequence $manifest_sequence conflicts with the trusted manifest" >&2
+    return 1
+  fi
+}
+
+check_state
+
+if (( commit_state )); then
+  state_dir=${state%/*}
+  state_base=${state##*/}
+  [[ $state_dir != "$state" ]] || state_dir=.
+  if [[ ! -d $state_dir ]]; then
+    echo "Anti-rollback state directory does not exist: $state_dir" >&2
+    exit 1
+  fi
+
+  exec 9>"$state.lock"
+  flock -x 9
+  check_state
+
+  if [[ ! -e $state ]] || (( manifest_sequence > $(jq -r '.highest_sequence' "$state") )); then
+    state_temporary=$(mktemp "$state_dir/.${state_base}.tmp.XXXXXX")
+    jq -n -S \
+      --argjson highest_sequence "$manifest_sequence" \
+      --arg manifest_sha256 "$manifest_sha256" '{
+        schema_version: 1,
+        target: "aarch64/apple-silicon",
+        highest_sequence: $highest_sequence,
+        manifest_sha256: $manifest_sha256
+      }' >"$state_temporary"
+    chmod 600 "$state_temporary"
+    mv -f -- "$state_temporary" "$state"
+  fi
+fi
+
+echo "Signed Apple ISO manifest verified at sequence $manifest_sequence"

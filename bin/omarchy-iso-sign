@@ -3,15 +3,15 @@
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
-  echo "usage: omarchy-iso-sign [release/omarchy.iso]"
+  echo "usage: omarchy-iso-sign FILE"
   exit 1
 fi
 
-iso="$1"
+artifact="$1"
 key_ref="op://Shared/Omarchy GPG Private Key/omarchy-private.asc"
 
-if [[ ! -f $iso ]]; then
-  echo "ISO not found: $iso" >&2
+if [[ ! -f $artifact ]]; then
+  echo "File not found: $artifact" >&2
   exit 1
 fi
 
@@ -44,5 +44,5 @@ fi
 gpg --batch --yes \
   --homedir "$gnupg_home" \
   --local-user "$signing_key" \
-  --output "$iso.sig" \
-  --detach-sig "$iso"
+  --output "$artifact.sig" \
+  --detach-sig "$artifact"

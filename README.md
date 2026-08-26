@@ -18,10 +18,27 @@ Corruption anywhere in the ISO is worth catching before the write, and corruptio
 
 Run `./bin/omarchy-iso-make`; output goes into `./release`. By default the ISO uses the Omarchy packages and tracks the `quattro` branch, from the stable mirror. Pass `--edge` to use `omarchy-dev` and `omarchy-settings-dev` from the edge mirror.
 
-The build defaults to `x86_64`. Pass `--arch aarch64` to select the generic
-UEFI ARM64 build path. Architecture selection alone does not make an Apple
-Silicon image; Apple boot policy and Asahi platform integration are outside the
-generic media target.
+The build defaults to the canonical `x86_64/pc` media target. Pass
+`--arch aarch64` or `--target aarch64/generic` to select generic UEFI ARM64.
+The distinct `aarch64/apple-silicon` target is defined but currently fails
+before the build. `builder/apple-platform-snapshot.json` pins nine current
+Asahi platform packages and detached signatures by SHA-256 and records the
+verified signing-key fingerprint. The Apple-only offline fetch path verifies
+and adds those packages to the mirror, and its live profile selects
+`linux-asahi` plus the Asahi initramfs firmware hook. The bridge-owned internal
+boot bundle supplies model device trees and U-Boot; the removable media retains
+the standard `/EFI/BOOT/BOOTAA64.EFI` boundary. A complete Apple ISO build and
+boot through that chain have not been proven, so the target remains disabled.
+It will never silently substitute generic ARM media; architecture selection
+alone does not make an Apple Silicon image.
+
+For disposable build validation only, the explicit combination
+`--target aarch64/apple-silicon --apple-media-validation-build` bypasses the
+readiness stop while retaining the Apple target identity. It uses a separate
+package cache and names the result `*-aarch64-apple-silicon-*.iso`, preventing
+it from colliding with generic ARM media. The command labels the output
+unverified and forbidden for release; it does not satisfy the build-and-boot
+gate by itself.
 
 For local development, build the ISO from sibling checkouts:
 
@@ -137,13 +154,50 @@ The first scenario is `factory-reset`: it proves `omarchy-system-factory-reset` 
 
 Artifacts — screenshots, the fixtured/staged/final `limine.conf`, the reset typescript, and the factory-reset log — land under `test-runs/<iso>-integration/runs/<timestamp>-<scenario>/`, and `--no-preview` skips the `imv` review just like the acceptance harness.
 
-## Signing the ISO
+## Signing release artifacts
 
-Run `./bin/omarchy-iso-sign [release/omarchy.iso]`. The signing key is retrieved from the shared Omarchy vault with the 1Password CLI.
+Run `./bin/omarchy-iso-sign FILE`. The signing key is retrieved from the shared Omarchy vault with the 1Password CLI. The command can sign either an ISO or its release manifest.
+
+The disabled Apple target has a local, deterministic manifest path so its
+release contract can be tested before publication is possible:
+
+```bash
+manifest=$(./bin/omarchy-iso-manifest \
+  --sequence 26 \
+  --version 5.0.0-mac.1 \
+  --source-commit "$(git rev-parse HEAD)" \
+  --package-snapshot builder/apple-platform-snapshot.json \
+  --media-evidence release/omarchy-5.0.0-mac.1.iso.apple-media-evidence.json \
+  release/omarchy-5.0.0-mac.1.iso)
+./bin/omarchy-iso-sign "$manifest"
+./bin/omarchy-iso-manifest-verify \
+  --keyring /path/to/omarchy-release-keyring.gpg \
+  --state /path/to/trusted/apple-release-state.json \
+  --package-snapshot builder/apple-platform-snapshot.json \
+  --media-evidence release/omarchy-5.0.0-mac.1.iso.apple-media-evidence.json \
+  --commit-state "$manifest" release/omarchy-5.0.0-mac.1.iso
+```
+
+The signed canonical JSON binds the exact ISO filename, size, SHA-256, source
+commit, independent `aarch64/apple-silicon` target, `asahi-grub` backend, and
+content-addressed Apple package snapshot, and the exact static media-evidence
+file produced by the build. That evidence proves ISO/ESP `BOOTAA64.EFI`
+identity, AArch64 PE format, Apple live-root identity, Asahi initramfs content,
+and GRUB paths while explicitly retaining `boot_verified: false` until the
+disposable Asahi boot gate runs. Verification rejects unknown or
+duplicate fields, noncanonical encodings, changed bytes, lower sequences, and
+same-sequence equivocation. The state file is the local anti-rollback trust
+anchor: put it in durable storage whose permissions and rollback protection
+match the release key's threat model. Verification is read-only unless
+`--commit-state` is explicit. This tooling does not enable the Apple build or
+publish anything. The current manifest intentionally has `boot_verified: false`;
+`omarchy-iso-upload` refuses Apple artifacts until boot verification, the
+physical-preview gate, and publication authorization are all represented as
+true in a future release-eligible schema.
 
 ## Uploading the ISO
 
-Run `./bin/omarchy-iso-upload [release/omarchy.iso]`. This requires rclone configuration (`rclone config`). The `.sig` and `.sha256` sidecars go up with the ISO when they exist beside it.
+Run `./bin/omarchy-iso-upload [release/omarchy.iso]`. This requires rclone configuration (`rclone config`). The `.sig` and `.sha256` sidecars go up with the ISO when they exist beside it. If either `.manifest.json` or `.manifest.json.sig` exists, the uploader requires both plus the media evidence before transferring any file. Apple validation manifests remain unpublishable while any release gate is false.
 
 ## Full release of the ISO
 
