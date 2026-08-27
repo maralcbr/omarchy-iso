@@ -39,5 +39,6 @@ grep -Fq "grep -Fxq 'usr/lib/asahi-boot/u-boot-nodtb.bin'" "$artifact_verifier"
 grep -Fq "grep -Fxq 'usr/bin/lzfse'" "$artifact_verifier"
 grep -Fq "grep -Fxq 'usr/lib/initcpio/hooks/asahi'" "$artifact_verifier"
 grep -Fq "grep -Fxq 'usr/bin/asahi-fwextract'" "$artifact_verifier"
+grep -Fq "grep -Fxq 'usr/lib/lv2/triforce.lv2/triforce.so'" "$artifact_verifier"
 
 echo "Apple platform snapshot tests passed"

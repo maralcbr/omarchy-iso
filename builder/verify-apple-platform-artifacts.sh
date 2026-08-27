@@ -85,6 +85,9 @@ while IFS=$'\t' read -r package_name filename package_sha256 signature_sha256; d
     lzfse)
       grep -Fxq 'usr/bin/lzfse' <<<"$package_listing"
       ;;
+    triforce-lv2)
+      grep -Fxq 'usr/lib/lv2/triforce.lv2/triforce.so' <<<"$package_listing"
+      ;;
   esac
 done < <(jq -r '.packages[] | [.name, .filename, .sha256, .signature_sha256] | @tsv' "$snapshot")
 

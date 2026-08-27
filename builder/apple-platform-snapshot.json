@@ -115,6 +115,12 @@
       "filename": "tiny-dfr-0.3.7-1-aarch64.pkg.tar.xz",
       "sha256": "a2d2fad527f6717ea39fdeeae0532d3e142c8024bee4b6c38287958538cead1f",
       "signature_sha256": "6a2ac2ea1f1fdaab0ec6cb085bf8661d17b54e924028c7e7021bf331cd68432b"
+    },
+    {
+      "name": "triforce-lv2",
+      "filename": "triforce-lv2-0.3.2-1-aarch64.pkg.tar.xz",
+      "sha256": "269c77cae5e2c7959c2ff27bb3d57456552f3acaf502ae2c7a1baebaeeb5c5fb",
+      "signature_sha256": "60f928fed7645cb45ee3e357b32f190f779216f30106c21320bdd366a0db25eb"
     }
   ],
   "verification": {
