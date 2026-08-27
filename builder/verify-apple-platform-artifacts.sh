@@ -76,6 +76,9 @@ while IFS=$'\t' read -r package_name filename package_sha256 signature_sha256; d
       grep -Eq '^usr/lib/python[^/]*/site-packages/asahi_firmware/core\.py$' \
         <<<"$package_listing"
       ;;
+    lzfse)
+      grep -Fxq 'usr/bin/lzfse' <<<"$package_listing"
+      ;;
   esac
 done < <(jq -r '.packages[] | [.name, .filename, .sha256, .signature_sha256] | @tsv' "$snapshot")
 

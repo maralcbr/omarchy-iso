@@ -35,6 +35,7 @@ grep -Fq 'actual_fingerprint == "$expected_fingerprint"' "$artifact_verifier"
 grep -Fq 'gpg --batch --homedir "$verify_home" --verify' "$artifact_verifier"
 grep -Fq "grep -Fxq 'usr/lib/asahi-boot/m1n1.bin'" "$artifact_verifier"
 grep -Fq "grep -Fxq 'usr/lib/asahi-boot/u-boot-nodtb.bin'" "$artifact_verifier"
+grep -Fq "grep -Fxq 'usr/bin/lzfse'" "$artifact_verifier"
 grep -Fq "grep -Fxq 'usr/lib/initcpio/hooks/asahi'" "$artifact_verifier"
 grep -Fq "grep -Fxq 'usr/bin/asahi-fwextract'" "$artifact_verifier"
 

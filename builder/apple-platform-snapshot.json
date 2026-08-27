@@ -52,9 +52,15 @@
     },
     {
       "name": "asahi-fwextract",
-      "filename": "asahi-fwextract-0.7.9-1-any.pkg.tar.xz",
-      "sha256": "ebc8d74a42108787ff749e954af907d77c79f516c85a7403c2fa91424b701ee0",
-      "signature_sha256": "171998c0787403eb5d5a0d93b8f5dab969e450d650bde01e74f85a21834be940"
+      "filename": "asahi-fwextract-0.8.4-1-any.pkg.tar.xz",
+      "sha256": "a93c13ca6332a51a75b1e5c0a396c8d86a2a5b75366df3d8ea207471d825396f",
+      "signature_sha256": "0693363932f2c21cc37135f3250557994fe908bef257e1f0a59d8e2df7d19fac"
+    },
+    {
+      "name": "lzfse",
+      "filename": "lzfse-1.0-1-aarch64.pkg.tar.xz",
+      "sha256": "dbd9c787f000c6e682f54d7420aa3bb72d21396085a1e1ec192c7661d38af51b",
+      "signature_sha256": "25ea575d7433a846b5702192b3f47ecc38b8c98f8bffe6714f5f69eb82eb3a67"
     },
     {
       "name": "asahi-audio",

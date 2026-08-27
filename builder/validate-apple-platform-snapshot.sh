@@ -3,7 +3,7 @@
 set -euo pipefail
 
 snapshot=${1:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/apple-platform-snapshot.json}
-expected_packages='["asahi-audio","asahi-fwextract","asahi-scripts","linux-asahi","linux-asahi-headers","m1n1","speakersafetyd","tiny-dfr","uboot-asahi"]'
+expected_packages='["asahi-audio","asahi-fwextract","asahi-scripts","linux-asahi","linux-asahi-headers","lzfse","m1n1","speakersafetyd","tiny-dfr","uboot-asahi"]'
 
 jq -e --argjson expected_packages "$expected_packages" '
   def hash: type == "string" and test("^[0-9a-f]{64}$");
@@ -17,7 +17,7 @@ jq -e --argjson expected_packages "$expected_packages" '
   (.trust.keyring.filename as $keyring_filename |
     .trust.keyring.url | endswith("/" + $keyring_filename)) and
   ([.packages[].name] | sort) == $expected_packages and
-  ([.packages[].name] | unique | length) == 9 and
+  ([.packages[].name] | unique | length) == 10 and
   all(.packages[];
     (.filename | type == "string" and length > 0) and
     (.sha256 | hash) and
