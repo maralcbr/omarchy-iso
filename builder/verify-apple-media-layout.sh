@@ -20,10 +20,13 @@ package_list="$iso_tree/arch/pkglist.aarch64.txt"
 media_target="$airootfs/usr/share/omarchy-iso/media-target"
 media_descriptor="$airootfs/usr/share/omarchy-iso/media-target.json"
 shipped_snapshot="$airootfs/usr/share/omarchy-iso/apple-platform-snapshot.json"
+validation_marker="$airootfs/usr/share/omarchy-iso/apple-media-validation"
+validation_console="$airootfs/usr/local/bin/omarchy-apple-media-validate"
 
 for required in \
   "$iso_bootaa64" "$esp_bootaa64" "$kernel" "$initramfs" "$grub_config" \
-  "$package_list" "$media_target" "$media_descriptor" "$shipped_snapshot" "$snapshot"; do
+  "$package_list" "$media_target" "$media_descriptor" "$shipped_snapshot" "$snapshot" \
+  "$validation_marker" "$validation_console"; do
   if [[ ! -f $required ]]; then
     echo "Required Apple media input not found: $required" >&2
     exit 1
@@ -48,6 +51,29 @@ if ! jq -e '
   echo "Live root Apple media descriptor is invalid" >&2
   exit 1
 fi
+
+if ! grep -Fxq "mode=read-only-canary" "$validation_marker"; then
+  echo "Apple media does not declare read-only canary mode" >&2
+  exit 1
+fi
+if [[ ! -x $validation_console ]]; then
+  echo "Apple validation console is not executable" >&2
+  exit 1
+fi
+for forbidden in \
+  "$airootfs/root/configurator" \
+  "$airootfs/usr/local/bin/omarchy-cidata-load" \
+  "$airootfs/usr/local/bin/omarchy-install-dashboard" \
+  "$airootfs/usr/local/bin/omarchy-iso-cleanup-disk" \
+  "$airootfs/usr/local/bin/omarchy-iso-install" \
+  "$airootfs/usr/share/omarchy-iso/orchestrator" \
+  "$airootfs/usr/share/omarchy-iso/disk-partitioning.sh" \
+  "$airootfs/usr/share/omarchy-iso/setup-form.sh"; do
+  if [[ -e $forbidden ]]; then
+    echo "Apple validation media contains mutation-capable entry point: $forbidden" >&2
+    exit 1
+  fi
+done
 
 if ! cmp -s -- "$snapshot" "$shipped_snapshot"; then
   echo "Live root does not contain the exact pinned Apple platform snapshot" >&2
@@ -95,7 +121,11 @@ fi
 
 for expected in \
   '/arch/boot/aarch64/vmlinuz-linux-asahi' \
-  '/arch/boot/aarch64/initramfs-linux-asahi.img'; do
+  '/arch/boot/aarch64/initramfs-linux-asahi.img' \
+  'systemd.gpt_auto=0' \
+  'rd.systemd.gpt_auto=0' \
+  'fstab=no' \
+  'rd.fstab=no'; do
   if ! grep -Fq -- "$expected" "$grub_config"; then
     echo "GRUB configuration does not reference $expected" >&2
     exit 1
@@ -151,7 +181,10 @@ jq -n -S \
       live_kernel: "linux-asahi",
       initramfs_asahi_hook: true,
       generic_arm_kernel_absent: true,
-      limine_boot_artifacts_absent: true
+      limine_boot_artifacts_absent: true,
+      validation_console: true,
+      installer_entrypoints_absent: true,
+      automatic_disk_discovery_disabled: true
     },
     hashes: {
       bootaa64_sha256: $bootaa64_sha256,

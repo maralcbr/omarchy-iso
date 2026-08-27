@@ -96,7 +96,7 @@ if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
   LIVE_PACKAGES=(
     linux-asahi asahi-scripts asahi-alarm-keyring
     git gum jq openssl plymouth omarchy-keyring
-    "$OMARCHY_SETTINGS_PACKAGE" lvm2 cryptsetup parted
+    "$OMARCHY_SETTINGS_PACKAGE"
   )
 fi
 
@@ -164,9 +164,37 @@ EOF
   if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
     sed -i -e 's/ filesystems/ asahi filesystems/' \
       "$profile/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
+    sed -i -E \
+      '/^[[:space:]]*linux / s/$/ systemd.gpt_auto=0 rd.systemd.gpt_auto=0 fstab=no rd.fstab=no/' \
+      "$profile/grub/grub.cfg" "$profile/grub/loopback.cfg"
   fi
   sed -i \
     -e "s/vmlinuz-linux-t2/$LIVE_KERNEL_BOOT_NAME/g" \
     -e "s/initramfs-linux-t2\\.img/$LIVE_INITRAMFS_BOOT_NAME/g" \
     "$profile/grub/grub.cfg" "$profile/grub/loopback.cfg"
+}
+
+seal_apple_validation_profile() {
+  local profile=$1
+  local live_root="$profile/airootfs"
+  local marker="$live_root/usr/share/omarchy-iso/apple-media-validation"
+
+  [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]] || return 0
+
+  mkdir -p "${marker%/*}"
+  cat >"$marker" <<EOF
+schema_version=1
+mode=read-only-canary
+source_commit=${OMARCHY_ISO_SOURCE_COMMIT:-unknown}
+EOF
+
+  rm -f \
+    "$live_root/root/configurator" \
+    "$live_root/usr/local/bin/omarchy-cidata-load" \
+    "$live_root/usr/local/bin/omarchy-install-dashboard" \
+    "$live_root/usr/local/bin/omarchy-iso-cleanup-disk" \
+    "$live_root/usr/local/bin/omarchy-iso-install" \
+    "$live_root/usr/share/omarchy-iso/disk-partitioning.sh" \
+    "$live_root/usr/share/omarchy-iso/setup-form.sh"
+  rm -rf "$live_root/usr/share/omarchy-iso/orchestrator"
 }

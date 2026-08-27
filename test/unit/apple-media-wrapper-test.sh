@@ -12,6 +12,7 @@ mkdir -p \
   "$work/source-iso/arch/aarch64" \
   "$work/source-iso/boot/grub" \
   "$work/source-airootfs/usr/share/omarchy-iso" \
+  "$work/source-airootfs/usr/local/bin" \
   "$work/initramfs/hooks" \
   "$work/initramfs/usr/share/asahi-scripts"
 
@@ -25,7 +26,7 @@ printf '#!/bin/ash\n' >"$work/initramfs/usr/share/asahi-scripts/functions.sh"
 /usr/bin/bsdtar -cf "$work/source-iso/arch/boot/aarch64/initramfs-linux-asahi.img" \
   -C "$work/initramfs" .
 cat >"$work/source-iso/boot/grub/grub.cfg" <<'EOF'
-linux /arch/boot/aarch64/vmlinuz-linux-asahi
+linux /arch/boot/aarch64/vmlinuz-linux-asahi systemd.gpt_auto=0 rd.systemd.gpt_auto=0 fstab=no rd.fstab=no
 initrd /arch/boot/aarch64/initramfs-linux-asahi.img
 EOF
 cat >"$work/source-iso/arch/pkglist.aarch64.txt" <<'EOF'
@@ -40,6 +41,14 @@ cat >"$work/source-airootfs/usr/share/omarchy-iso/media-target.json" <<'EOF'
 EOF
 cp "$ROOT/builder/apple-platform-snapshot.json" \
   "$work/source-airootfs/usr/share/omarchy-iso/apple-platform-snapshot.json"
+cat >"$work/source-airootfs/usr/share/omarchy-iso/apple-media-validation" <<'EOF'
+schema_version=1
+mode=read-only-canary
+source_commit=0123456789abcdef0123456789abcdef01234567
+EOF
+cp "$ROOT/configs/airootfs/usr/local/bin/omarchy-apple-media-validate" \
+  "$work/source-airootfs/usr/local/bin/omarchy-apple-media-validate"
+chmod +x "$work/source-airootfs/usr/local/bin/omarchy-apple-media-validate"
 printf 'synthetic ISO container bytes\n' >"$work/apple.iso"
 
 cat >"$work/stubs/bsdtar" <<'STUB'
@@ -116,6 +125,9 @@ jq -e --arg filename apple.iso --arg sha "$(sha256sum "$work/apple.iso" | cut -d
   .artifact.sha256 == $sha and
   .layout.target.platform == "apple-silicon" and
   .layout.checks.iso_tree_bootaa64_matches_esp == true and
+  .layout.checks.validation_console == true and
+  .layout.checks.installer_entrypoints_absent == true and
+  .layout.checks.automatic_disk_discovery_disabled == true and
   .boot == {
     blocker: "disposable-asahi-boot-evidence-absent",
     verified: false

@@ -1,0 +1,141 @@
+#!/bin/bash
+
+set -euo pipefail
+
+root=${OMARCHY_VALIDATION_ROOT:-}
+marker="$root/usr/share/omarchy-iso/apple-media-validation"
+media_target="$root/usr/share/omarchy-iso/media-target"
+cmdline_file="$root/proc/cmdline"
+audit_file="$root/run/omarchy-apple-validation.json"
+
+fail() {
+  echo "Apple media validation failed closed: $*" >&2
+  exit 1
+}
+
+[[ -f $marker ]] || fail "validation marker is absent"
+[[ -f $media_target ]] || fail "media target marker is absent"
+[[ $(<"$media_target") == "aarch64/apple-silicon" ]] ||
+  fail "media target is not aarch64/apple-silicon"
+grep -Fxq "mode=read-only-canary" "$marker" ||
+  fail "validation marker does not declare read-only-canary mode"
+[[ -r $cmdline_file ]] || fail "kernel command line is unavailable"
+
+forbidden_paths=(
+  /root/configurator
+  /usr/local/bin/omarchy-cidata-load
+  /usr/local/bin/omarchy-install-dashboard
+  /usr/local/bin/omarchy-iso-cleanup-disk
+  /usr/local/bin/omarchy-iso-install
+  /usr/share/omarchy-iso/orchestrator
+  /usr/share/omarchy-iso/disk-partitioning.sh
+  /usr/share/omarchy-iso/setup-form.sh
+)
+for forbidden in "${forbidden_paths[@]}"; do
+  [[ ! -e $root$forbidden ]] ||
+    fail "mutation-capable entry point remains: $forbidden"
+done
+
+cmdline=$(tr '\n\0' '  ' <"$cmdline_file")
+required_cmdline=(
+  systemd.gpt_auto=0
+  rd.systemd.gpt_auto=0
+  fstab=no
+  rd.fstab=no
+)
+for required in "${required_cmdline[@]}"; do
+  [[ " $cmdline " == *" $required "* ]] ||
+    fail "kernel command line is missing $required"
+done
+
+udevadm settle >/dev/null 2>&1 || fail "udev did not settle"
+
+while read -r source target options; do
+  [[ -n ${source:-} ]] || continue
+  case "$source" in
+    /dev/nvme*)
+      if [[ ,$options, == *,rw,* ]]; then
+        fail "internal NVMe is already mounted read-write at $target"
+      fi
+      ;;
+  esac
+done < <(findmnt -rn -o SOURCE,TARGET,OPTIONS)
+
+mapfile -t active_swap < <(swapon --noheadings --raw --output NAME 2>/dev/null || true)
+for source in "${active_swap[@]}"; do
+  case "$source" in
+    /dev/nvme*)
+      swapoff "$source" || fail "could not disable internal NVMe swap $source"
+      ;;
+  esac
+done
+if swapon --noheadings --raw --output NAME 2>/dev/null | grep -q '^/dev/nvme'; then
+  fail "internal NVMe swap remains active"
+fi
+
+shopt -s nullglob
+nvme_devices=("$root"/dev/nvme*n*)
+shopt -u nullglob
+(( ${#nvme_devices[@]} > 0 )) || fail "no internal NVMe block devices were found"
+
+readonly_devices=()
+for device in "${nvme_devices[@]}"; do
+  [[ -b $device || ( -n $root && -e $device ) ]] || continue
+  blockdev --setro "$device" || fail "could not mark ${device#"$root"} read-only"
+  [[ $(blockdev --getro "$device") == "1" ]] ||
+    fail "${device#"$root"} did not report read-only"
+  readonly_devices+=("${device#"$root"}")
+done
+(( ${#readonly_devices[@]} > 0 )) || fail "no NVMe namespace could be protected"
+
+mkdir -p "${audit_file%/*}"
+source_commit=$(awk -F= '$1 == "source_commit" { print $2 }' "$marker")
+model=unknown
+compatible=unknown
+if [[ -r $root/proc/device-tree/model ]]; then
+  model=$(tr -d '\0' <"$root/proc/device-tree/model")
+fi
+if [[ -r $root/proc/device-tree/compatible ]]; then
+  compatible=$(tr '\0' ',' <"$root/proc/device-tree/compatible" | sed 's/,$//')
+fi
+devices_json=$(printf '%s\n' "${readonly_devices[@]}" |
+  jq -Rsc 'split("\n") | map(select(length > 0))')
+jq_args=(
+  --arg source_commit "${source_commit:-unknown}"
+  --arg model "$model"
+  --arg compatible "$compatible"
+  --arg cmdline "$cmdline"
+  --argjson readonly_devices "$devices_json"
+)
+jq -n "${jq_args[@]}" '{
+  schema_version: 1,
+  verification_kind: "physical-apple-canary-preflight",
+  media_target: "aarch64/apple-silicon",
+  source_commit: $source_commit,
+  device_tree: {model: $model, compatible: $compatible},
+  kernel_cmdline: $cmdline,
+  checks: {
+    installer_entrypoints_absent: true,
+    automatic_disk_discovery_disabled: true,
+    internal_nvme_swap_absent: true,
+    internal_nvme_read_only: true
+  },
+  readonly_devices: $readonly_devices
+}' >"$audit_file"
+
+echo
+echo "Omarchy Apple Silicon read-only validation console"
+echo "Source commit: ${source_commit:-unknown}"
+echo "Audit: /run/omarchy-apple-validation.json"
+echo "Internal NVMe devices are block-layer read-only; installer entry points are absent."
+echo "No installation is available from this validation artifact."
+echo
+lsblk -o NAME,TYPE,SIZE,RO,MOUNTPOINTS
+
+if [[ ${OMARCHY_VALIDATION_NO_SHELL:-0} == "1" ]]; then
+  exit 0
+fi
+
+export HISTFILE=/dev/null
+export PS1='omarchy-apple-validation(ro)# '
+exec /bin/bash --noprofile --norc

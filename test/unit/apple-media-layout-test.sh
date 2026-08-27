@@ -14,6 +14,7 @@ mkdir -p \
   "$iso_tree/arch/boot/aarch64" \
   "$iso_tree/boot/grub" \
   "$airootfs/usr/share/omarchy-iso" \
+  "$airootfs/usr/local/bin" \
   "$work/initramfs/hooks" \
   "$work/initramfs/usr/share/asahi-scripts"
 
@@ -27,7 +28,7 @@ printf '#!/bin/ash\n' >"$work/initramfs/usr/share/asahi-scripts/functions.sh"
 bsdtar -cf "$iso_tree/arch/boot/aarch64/initramfs-linux-asahi.img" \
   -C "$work/initramfs" .
 cat >"$iso_tree/boot/grub/grub.cfg" <<'EOF'
-linux /arch/boot/aarch64/vmlinuz-linux-asahi
+linux /arch/boot/aarch64/vmlinuz-linux-asahi systemd.gpt_auto=0 rd.systemd.gpt_auto=0 fstab=no rd.fstab=no
 initrd /arch/boot/aarch64/initramfs-linux-asahi.img
 EOF
 cat >"$iso_tree/arch/pkglist.aarch64.txt" <<'EOF'
@@ -40,6 +41,14 @@ cat >"$airootfs/usr/share/omarchy-iso/media-target.json" <<'EOF'
 {"schema_version":1,"architecture":"aarch64","platform":"apple-silicon","boot_backend":"asahi-grub","artifact_kind":"iso"}
 EOF
 cp "$snapshot" "$airootfs/usr/share/omarchy-iso/apple-platform-snapshot.json"
+cat >"$airootfs/usr/share/omarchy-iso/apple-media-validation" <<'EOF'
+schema_version=1
+mode=read-only-canary
+source_commit=0123456789abcdef0123456789abcdef01234567
+EOF
+cp "$ROOT/configs/airootfs/usr/local/bin/omarchy-apple-media-validate" \
+  "$airootfs/usr/local/bin/omarchy-apple-media-validate"
+chmod +x "$airootfs/usr/local/bin/omarchy-apple-media-validate"
 
 drop_last_line() {
   local target=$1
@@ -63,6 +72,9 @@ jq -e '
   .checks.initramfs_asahi_hook == true and
   .checks.generic_arm_kernel_absent == true and
   .checks.limine_boot_artifacts_absent == true and
+  .checks.validation_console == true and
+  .checks.installer_entrypoints_absent == true and
+  .checks.automatic_disk_discovery_disabled == true and
   (.hashes.platform_snapshot_sha256 | test("^[0-9a-f]{64}$"))
 ' <<<"$layout" >/dev/null
 echo "ok - exact Apple media layout produces canonical structural evidence"

@@ -480,6 +480,10 @@ fi
 # Live ISO uses the same offline pacman.conf.
 cp "$build_cache_dir/pacman-offline.conf" "$build_cache_dir/airootfs/etc/pacman.conf"
 
+# The Apple target is validation-only: remove every installer/mutation entry
+# point after all profile assembly so no later copy can reintroduce one.
+seal_apple_validation_profile "$build_cache_dir"
+
 # Build the ISO.
 "${MKARCHISO[@]}" -v -w "$build_cache_dir/work/" -o /out/ "$build_cache_dir/"
 

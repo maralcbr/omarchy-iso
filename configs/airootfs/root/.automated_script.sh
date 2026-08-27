@@ -12,6 +12,13 @@ set -euo pipefail
 
 [[ $(tty) == /dev/tty1 ]] || exit 0
 
+# Apple validation media must never enter the installer path. Its profile is
+# sealed at build time and this diagnostic entry point independently verifies
+# the no-write boot contract before presenting a console.
+if [[ -f /usr/share/omarchy-iso/apple-media-validation ]]; then
+  exec /usr/local/bin/omarchy-apple-media-validate
+fi
+
 export OMARCHY_MIRROR="$(cat /root/omarchy_mirror)"
 if [[ -f /root/omarchy_iso_ref ]]; then
   export OMARCHY_ISO_REF="$(cat /root/omarchy_iso_ref)"

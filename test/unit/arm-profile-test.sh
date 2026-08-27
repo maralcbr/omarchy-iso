@@ -132,6 +132,41 @@ grep -Fq 'asahi filesystems' \
   "$apple_profile/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
 grep -Fq 'linux /vmlinuz-linux-asahi' "$apple_profile/grub/grub.cfg"
 grep -Fq 'initrd /initramfs-linux-asahi.img' "$apple_profile/grub/grub.cfg"
+for guard in systemd.gpt_auto=0 rd.systemd.gpt_auto=0 fstab=no rd.fstab=no; do
+  grep -Fq "$guard" "$apple_profile/grub/grub.cfg"
+  grep -Fq "$guard" "$apple_profile/grub/loopback.cfg"
+done
+
+mkdir -p \
+  "$apple_profile/airootfs/root" \
+  "$apple_profile/airootfs/usr/local/bin" \
+  "$apple_profile/airootfs/usr/share/omarchy-iso/orchestrator"
+touch \
+  "$apple_profile/airootfs/root/configurator" \
+  "$apple_profile/airootfs/usr/local/bin/omarchy-cidata-load" \
+  "$apple_profile/airootfs/usr/local/bin/omarchy-install-dashboard" \
+  "$apple_profile/airootfs/usr/local/bin/omarchy-iso-cleanup-disk" \
+  "$apple_profile/airootfs/usr/local/bin/omarchy-iso-install" \
+  "$apple_profile/airootfs/usr/share/omarchy-iso/disk-partitioning.sh" \
+  "$apple_profile/airootfs/usr/share/omarchy-iso/setup-form.sh"
+export OMARCHY_ISO_SOURCE_COMMIT=0123456789abcdef0123456789abcdef01234567
+seal_apple_validation_profile "$apple_profile"
+grep -Fxq 'mode=read-only-canary' \
+  "$apple_profile/airootfs/usr/share/omarchy-iso/apple-media-validation"
+grep -Fxq 'source_commit=0123456789abcdef0123456789abcdef01234567' \
+  "$apple_profile/airootfs/usr/share/omarchy-iso/apple-media-validation"
+for forbidden in \
+  root/configurator \
+  usr/local/bin/omarchy-cidata-load \
+  usr/local/bin/omarchy-install-dashboard \
+  usr/local/bin/omarchy-iso-cleanup-disk \
+  usr/local/bin/omarchy-iso-install \
+  usr/share/omarchy-iso/orchestrator \
+  usr/share/omarchy-iso/disk-partitioning.sh \
+  usr/share/omarchy-iso/setup-form.sh; do
+  [[ ! -e $apple_profile/airootfs/$forbidden ]]
+done
+
 grep -Fq 'aarch64' "$ROOT/builder/archiso-aarch64.patch"
 grep -Fq -- '-e "${pacstrap_dir}/boot/Image"' "$ROOT/builder/archiso-aarch64.patch"
 
