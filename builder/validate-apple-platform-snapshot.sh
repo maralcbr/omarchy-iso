@@ -14,6 +14,7 @@ jq -e --argjson expected_packages "$expected_packages" '
   .target == {architecture: "aarch64", platform: "apple-silicon", boot_backend: "asahi-grub"} and
   (.trust.signing_fingerprint | test("^[0-9A-F]{40}$")) and
   (.trust.keyring.sha256 | hash) and
+  (.trust.keyring.signature_sha256 | hash) and
   (.trust.keyring.filename as $keyring_filename |
     .trust.keyring.url | endswith("/" + $keyring_filename)) and
   ([.packages[].name] | sort) == $expected_packages and

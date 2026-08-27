@@ -15,6 +15,7 @@ cp "$ROOT/builder/validate-apple-platform-snapshot.sh" "$builder/"
 
 keyring=$(jq -r '.trust.keyring.filename' "$builder/snapshot.json")
 printf 'test keyring\n' >"$remote/$keyring"
+printf 'keyring signature\n' >"$remote/$keyring.sig"
 while IFS= read -r package; do
   printf 'package %s\n' "$package" >"$remote/$package"
   printf 'signature %s\n' "$package" >"$remote/$package.sig"
@@ -27,6 +28,7 @@ if [[ ${TEST_VERIFY_FAIL:-0} != 0 ]]; then
   exit 1
 fi
 [[ -f $2/$(jq -r '.trust.keyring.filename' "$1") ]]
+[[ -f $2/$(jq -r '.trust.keyring.filename' "$1").sig ]]
 while IFS= read -r package; do
   [[ -f $2/$package && -f $2/$package.sig ]]
 done < <(jq -r '.packages[].filename' "$1")
@@ -52,9 +54,10 @@ TEST_REMOTE="$remote" BUILDER_ROOT="$builder" \
   APPLE_PLATFORM_SNAPSHOT="$builder/snapshot.json" PATH="$stubs:$PATH" \
   bash "$ROOT/builder/fetch-apple-platform-snapshot.sh" "$destination"
 expected_count=$(jq -r '.packages | length' "$builder/snapshot.json")
+[[ $(cat "$destination/APPLE-KEYRING") == "$keyring" ]]
 (( $(wc -l <"$destination/APPLE-PACKAGES") == expected_count ))
-(( $(find "$destination" -maxdepth 1 -type f -name '*.pkg.tar.xz' | wc -l) == expected_count ))
-(( $(find "$destination" -maxdepth 1 -type f -name '*.pkg.tar.xz.sig' | wc -l) == expected_count ))
+(( $(find "$destination" -maxdepth 1 -type f -name '*.pkg.tar.xz' | wc -l) == expected_count + 1 ))
+(( $(find "$destination" -maxdepth 1 -type f -name '*.pkg.tar.xz.sig' | wc -l) == expected_count + 1 ))
 
 if TEST_VERIFY_FAIL=1 TEST_REMOTE="$remote" BUILDER_ROOT="$builder" \
   APPLE_PLATFORM_SNAPSHOT="$builder/snapshot.json" PATH="$stubs:$PATH" \
@@ -63,5 +66,6 @@ if TEST_VERIFY_FAIL=1 TEST_REMOTE="$remote" BUILDER_ROOT="$builder" \
   exit 1
 fi
 [[ ! -e $work/rejected/APPLE-PACKAGES ]]
+[[ ! -e $work/rejected/APPLE-KEYRING ]]
 
 echo "Apple platform fetch tests passed"

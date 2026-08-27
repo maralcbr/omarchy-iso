@@ -10,14 +10,17 @@ builder_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 keyring_filename=$(jq -r '.trust.keyring.filename' "$snapshot")
 keyring_sha256=$(jq -r '.trust.keyring.sha256' "$snapshot")
+keyring_signature_sha256=$(jq -r '.trust.keyring.signature_sha256' "$snapshot")
 expected_fingerprint=$(jq -r '.trust.signing_fingerprint' "$snapshot")
 keyring_package="$artifact_dir/$keyring_filename"
+keyring_signature="$keyring_package.sig"
 
-[[ -f $keyring_package ]] || {
-  echo "Missing Apple platform keyring: $keyring_package" >&2
+[[ -f $keyring_package && -f $keyring_signature ]] || {
+  echo "Missing Apple platform keyring package or signature: $keyring_filename" >&2
   exit 1
 }
 echo "$keyring_sha256  $keyring_package" | sha256sum --check --status
+echo "$keyring_signature_sha256  $keyring_signature" | sha256sum --check --status
 
 verify_home=$(mktemp -d)
 trap 'rm -rf "$verify_home"' EXIT
@@ -34,6 +37,8 @@ actual_fingerprint=$(gpg --batch --homedir "$verify_home" --with-colons \
   echo "Apple platform signing fingerprint mismatch" >&2
   exit 1
 }
+gpg --batch --homedir "$verify_home" \
+  --verify "$keyring_signature" "$keyring_package" >/dev/null 2>&1
 
 while IFS=$'\t' read -r package_name filename package_sha256 signature_sha256; do
   package="$artifact_dir/$filename"

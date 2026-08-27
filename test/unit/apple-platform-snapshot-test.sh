@@ -18,6 +18,12 @@ if "$validator" "$work/limine.json" >/dev/null 2>&1; then
   exit 1
 fi
 
+jq 'del(.trust.keyring.signature_sha256)' "$snapshot" >"$work/unsigned-keyring.json"
+if "$validator" "$work/unsigned-keyring.json" >/dev/null 2>&1; then
+  echo "Apple platform snapshot accepted an unpinned keyring signature" >&2
+  exit 1
+fi
+
 jq 'del(.packages[0])' "$snapshot" >"$work/incomplete.json"
 if "$validator" "$work/incomplete.json" >/dev/null 2>&1; then
   echo "Apple platform snapshot accepted an incomplete package set" >&2
@@ -32,6 +38,7 @@ fi
 
 grep -Fq 'sha256sum --check --status' "$artifact_verifier"
 grep -Fq 'actual_fingerprint == "$expected_fingerprint"' "$artifact_verifier"
+grep -Fq 'keyring_signature_sha256' "$artifact_verifier"
 grep -Fq 'gpg --batch --homedir "$verify_home" --verify' "$artifact_verifier"
 grep -Fq 'actual_package_name == "$package_name"' "$artifact_verifier"
 grep -Fq "grep -Fxq 'usr/lib/asahi-boot/m1n1.bin'" "$artifact_verifier"

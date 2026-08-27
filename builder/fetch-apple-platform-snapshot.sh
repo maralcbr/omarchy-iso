@@ -21,6 +21,7 @@ download() {
 
 keyring=$(jq -r '.trust.keyring.filename' "$snapshot")
 download "$keyring"
+download "$keyring.sig"
 mapfile -t packages < <(jq -r '.packages[].filename' "$snapshot")
 for package in "${packages[@]}"; do
   download "$package"
@@ -31,10 +32,13 @@ if ! "$builder_root/verify-apple-platform-artifacts.sh" "$snapshot" "$work" >/de
   echo "Apple platform artifact verification failed" >&2
   exit 1
 fi
+install -m 0644 "$work/$keyring" "$destination/$keyring"
+install -m 0644 "$work/$keyring.sig" "$destination/$keyring.sig"
 for package in "${packages[@]}"; do
   install -m 0644 "$work/$package" "$destination/$package"
   install -m 0644 "$work/$package.sig" "$destination/$package.sig"
 done
+printf '%s\n' "$keyring" >"$destination/APPLE-KEYRING"
 printf '%s\n' "${packages[@]}" >"$destination/APPLE-PACKAGES"
 
 expected_count=$(jq -r '.packages | length' "$snapshot")

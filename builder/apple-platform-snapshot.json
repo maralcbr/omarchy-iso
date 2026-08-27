@@ -11,7 +11,8 @@
     "keyring": {
       "filename": "asahi-alarm-keyring-20241216-1-any.pkg.tar.xz",
       "url": "https://github.com/asahi-alarm/asahi-alarm/releases/download/aarch64/asahi-alarm-keyring-20241216-1-any.pkg.tar.xz",
-      "sha256": "798f4b283ad2819aee950d042f26566ae1a68f87c12247301ce449bea3b2d81e"
+      "sha256": "798f4b283ad2819aee950d042f26566ae1a68f87c12247301ce449bea3b2d81e",
+      "signature_sha256": "e741299c0ff770156b47ca4dac423b78fd9d160baac1064822b737865249a667"
     }
   },
   "target": {

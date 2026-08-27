@@ -31,6 +31,7 @@ linux /arch/boot/aarch64/vmlinuz-linux-asahi
 initrd /arch/boot/aarch64/initramfs-linux-asahi.img
 EOF
 cat >"$iso_tree/arch/pkglist.aarch64.txt" <<'EOF'
+asahi-alarm-keyring 20241216-1
 asahi-scripts 20260127.1-1
 linux-asahi 6.18.0-1
 EOF

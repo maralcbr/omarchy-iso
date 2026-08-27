@@ -44,6 +44,7 @@ apple_live_profile=$(
     "$LIVE_INITRAMFS_BOOT_NAME" "${LIVE_PACKAGES[*]}"
 )
 [[ $apple_live_profile == linux-asahi\|vmlinuz-linux-asahi\|initramfs-linux-asahi.img\|linux-asahi\ asahi-scripts* ]]
+[[ $apple_live_profile == *asahi-alarm-keyring* ]]
 
 filtered=$(printf '%s\n' linux linux-headers linux-asahi linux-asahi-headers \
   asahi-desktop-meta asahi-fwextract vulkan-asahi widevine amd-ucode tzupdate base |
@@ -59,7 +60,7 @@ apple_filtered=$(
     filter_target_packages
 )
 [[ $apple_filtered == $'linux-asahi\nlinux-asahi-headers\nlinux-asahi\nlinux-asahi-headers\nasahi-desktop-meta\nasahi-fwextract\nvulkan-asahi\nwidevine\ngrub\nbase' ]]
-grep -Fq 'required_package_files+=("${apple_package_names[@]}")' \
+grep -Fq 'required_package_files+=("${apple_keyring_names[@]}" "${apple_package_names[@]}")' \
   "$ROOT/builder/build-iso.sh"
 for package in asahi-audio asahi-fwextract asahi-scripts grub linux-asahi \
   linux-asahi-headers m1n1 speakersafetyd uboot-asahi; do
@@ -68,6 +69,7 @@ for package in asahi-audio asahi-fwextract asahi-scripts grub linux-asahi \
     exit 1
   }
 done
+grep -Fq 'asahi-alarm-keyring asahi-audio' "$ROOT/builder/build-iso.sh"
 
 profile="$work/profile"
 mkdir -p \

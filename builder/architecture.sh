@@ -90,7 +90,8 @@ if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
   LIVE_KERNEL_BOOT_NAME=vmlinuz-linux-asahi
   LIVE_INITRAMFS_BOOT_NAME=initramfs-linux-asahi.img
   LIVE_PACKAGES=(
-    linux-asahi asahi-scripts git gum jq openssl plymouth omarchy-keyring
+    linux-asahi asahi-scripts asahi-alarm-keyring
+    git gum jq openssl plymouth omarchy-keyring
     "$OMARCHY_SETTINGS_PACKAGE" lvm2 cryptsetup parted
   )
 fi

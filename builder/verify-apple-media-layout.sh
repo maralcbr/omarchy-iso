@@ -93,7 +93,7 @@ if grep -Eq 'linux-aarch64|limine' "$grub_config"; then
   exit 1
 fi
 
-for package in linux-asahi asahi-scripts; do
+for package in linux-asahi asahi-scripts asahi-alarm-keyring; do
   if [[ $(grep -Ec "^${package} " "$package_list") != 1 ]]; then
     echo "Apple live package list must contain exactly one $package entry" >&2
     exit 1

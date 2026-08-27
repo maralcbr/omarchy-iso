@@ -71,7 +71,13 @@ if [[ $OMARCHY_ARCH == "aarch64" ]]; then
   mapfile -t snapshot_package_names <"$offline_mirror_dir/ARM-PACKAGES"
   if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
     bash /builder/fetch-apple-platform-snapshot.sh "$offline_mirror_dir"
+    mapfile -t apple_keyring_names <"$offline_mirror_dir/APPLE-KEYRING"
+    (( ${#apple_keyring_names[@]} == 1 ))
+    bash /builder/install-apple-platform-keyring.sh \
+      "$OMARCHY_APPLE_PLATFORM_SNAPSHOT" \
+      "$offline_mirror_dir/${apple_keyring_names[0]}"
     mapfile -t apple_package_names <"$offline_mirror_dir/APPLE-PACKAGES"
+    snapshot_package_names+=("${apple_keyring_names[@]}")
     snapshot_package_names+=("${apple_package_names[@]}")
   fi
   snapshot_packages=()
@@ -80,7 +86,7 @@ if [[ $OMARCHY_ARCH == "aarch64" ]]; then
   done
   if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
     apple_platform_package_count=$(jq -r '.packages | length' "$OMARCHY_APPLE_PLATFORM_SNAPSHOT")
-    (( ${#snapshot_packages[@]} == ARM_REPOSITORY_PACKAGE_COUNT + 6 + apple_platform_package_count ))
+    (( ${#snapshot_packages[@]} == ARM_REPOSITORY_PACKAGE_COUNT + 7 + apple_platform_package_count ))
   else
     (( ${#snapshot_packages[@]} == ARM_REPOSITORY_PACKAGE_COUNT + 6 ))
   fi
@@ -274,8 +280,8 @@ if [[ $OMARCHY_ARCH == "aarch64" ]] && ! grep -Fxq archlinuxarm-keyring "$shippe
 fi
 if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
   printf '%s\n' \
-    asahi-audio asahi-fwextract asahi-scripts grub linux-asahi \
-    linux-asahi-headers m1n1 speakersafetyd uboot-asahi \
+    asahi-alarm-keyring asahi-audio asahi-fwextract asahi-scripts grub \
+    linux-asahi linux-asahi-headers m1n1 speakersafetyd uboot-asahi \
     >>"$shipped_base_packages"
   sort -u -o "$shipped_base_packages" "$shipped_base_packages"
 fi
@@ -362,7 +368,7 @@ if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
   # Preserve the complete signed platform snapshot in the offline mirror.
   # tiny-dfr is deliberately not a universal target package, but an exact-model
   # backend can install it without reaching a moving network repository.
-  required_package_files+=("${apple_package_names[@]}")
+  required_package_files+=("${apple_keyring_names[@]}" "${apple_package_names[@]}")
 fi
 
 # The online transaction intentionally excludes packages built from the local
