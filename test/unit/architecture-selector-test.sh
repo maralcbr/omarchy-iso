@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 work=$(mktemp -d)
-trap 'rm -rf "$work"; rm -f "$ROOT"/release/omarchy-test-{x86_64,aarch64}-quattro.iso "$ROOT"/release/omarchy-test-aarch64-apple-silicon-quattro.iso; rmdir "$ROOT/release" 2>/dev/null || true' EXIT
+trap 'rm -rf "$work"; rm -f "$ROOT"/release/omarchy-test-{x86_64,aarch64}-quattro.iso "$ROOT"/release/omarchy-test-aarch64-apple-silicon-quattro.iso "$ROOT"/release/omarchy-test-aarch64-apple-silicon-quattro.iso.apple-media-evidence.json; rmdir "$ROOT/release" 2>/dev/null || true' EXIT
 
 mkdir -p "$work/bin" "$work/home"
 

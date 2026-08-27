@@ -30,7 +30,6 @@ export OMARCHY_RUNTIME_PACKAGE OMARCHY_SETTINGS_PACKAGE OMARCHY_NVIM_PACKAGE
 source /builder/architecture.sh
 if (( OMARCHY_MEDIA_TARGET_READY == 0 )); then
   if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
-    /builder/validate-apple-platform-snapshot.sh "$OMARCHY_APPLE_PLATFORM_SNAPSHOT"
     if [[ ${OMARCHY_APPLE_MEDIA_BUILD_PROBE:-0} == "1" ]]; then
       echo "Building an unverified Apple media validation artifact; release use is forbidden." >&2
     else
@@ -49,6 +48,22 @@ fi
 build_cache_dir=/var/cache
 offline_mirror_dir="$build_cache_dir/airootfs/var/cache/omarchy/mirror/offline"
 mkdir -p "$build_cache_dir" "$offline_mirror_dir"
+
+# Packages installed into the Arch container used to build the ISO.
+pacman-key --init
+pacman --noconfirm -Sy "$DISTRO_KEYRING_PACKAGE"
+pacman-key --populate "$DISTRO_KEYRING_NAME"
+# Full upgrade, not just -Sy: docker never re-pulls :latest once it's cached,
+# so this container can be months behind the mirror it installs from. A plain
+# -Sy install is then a partial upgrade — new packages linked against a glibc
+# the container doesn't have yet.
+pacman --noconfirm -Syu "${BUILD_HOST_PACKAGES[@]}"
+
+# Snapshot parsing and verification depend on build-host tools such as jq and
+# gpg, which are intentionally not assumed to exist in the minimal base image.
+if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
+  /builder/validate-apple-platform-snapshot.sh "$OMARCHY_APPLE_PLATFORM_SNAPSHOT"
+fi
 
 if [[ $OMARCHY_ARCH == "aarch64" ]]; then
   source /builder/arm-package-snapshots.conf
@@ -71,16 +86,6 @@ if [[ $OMARCHY_ARCH == "aarch64" ]]; then
   fi
   repo-add "$offline_mirror_dir/arm-snapshots.db.tar.gz" "${snapshot_packages[@]}"
 fi
-
-# Packages installed into the Arch container used to build the ISO.
-pacman-key --init
-pacman --noconfirm -Sy "$DISTRO_KEYRING_PACKAGE"
-pacman-key --populate "$DISTRO_KEYRING_NAME"
-# Full upgrade, not just -Sy: docker never re-pulls :latest once it's cached,
-# so this container can be months behind the mirror it installs from. A plain
-# -Sy install is then a partial upgrade — new packages linked against a glibc
-# the container doesn't have yet.
-pacman --noconfirm -Syu "${BUILD_HOST_PACKAGES[@]}"
 
 if [[ $OMARCHY_ARCH == "aarch64" ]]; then
   cp /archiso/archiso/mkarchiso "${MKARCHISO[0]}"
