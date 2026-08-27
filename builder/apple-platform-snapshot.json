@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-08-27T00:00:00Z",
+  "source": {
+    "repository": "asahi-alarm/asahi-alarm",
+    "release_tag": "aarch64",
+    "tag_is_mutable": true
+  },
+  "trust": {
+    "signing_fingerprint": "12CE6799A94A3F1B5DDFFE88F576553597FB8FEB",
+    "keyring": {
+      "filename": "asahi-alarm-keyring-20241216-1-any.pkg.tar.xz",
+      "url": "https://github.com/asahi-alarm/asahi-alarm/releases/download/aarch64/asahi-alarm-keyring-20241216-1-any.pkg.tar.xz",
+      "sha256": "798f4b283ad2819aee950d042f26566ae1a68f87c12247301ce449bea3b2d81e"
+    }
+  },
+  "target": {
+    "architecture": "aarch64",
+    "platform": "apple-silicon",
+    "boot_backend": "asahi-grub"
+  },
+  "packages": [
+    {
+      "name": "linux-asahi",
+      "filename": "linux-asahi-7.1.6.asahi1-1-aarch64.pkg.tar.xz",
+      "sha256": "950cff721c63d24ea98bac8087b4aa5b1a025afa7c1f047dd681b191e8b1b420",
+      "signature_sha256": "17726e4a67f98967f7ee3936053a60c99a85398c77ad9dbf11070317c9d7117c"
+    },
+    {
+      "name": "linux-asahi-headers",
+      "filename": "linux-asahi-headers-7.1.6.asahi1-1-aarch64.pkg.tar.xz",
+      "sha256": "5aa3168b27dfc845db8ec078ca648040d4451275eb12d7c7f4992d6208c4c91d",
+      "signature_sha256": "d6dd4069a4ec7f29d7548349727f9212dd46ff5a4e71fc8fb809f589d4b237d2"
+    },
+    {
+      "name": "m1n1",
+      "filename": "m1n1-1.6.1-1-aarch64.pkg.tar.xz",
+      "sha256": "8aecb495044749a580dde54bb6c517367ecde3b6c8eea49acce9c929239a4e96",
+      "signature_sha256": "1faa12e8e1c2ad408e9e1f51bd30910d4dde11a3fc2532b311f6be57c9f76579"
+    },
+    {
+      "name": "uboot-asahi",
+      "filename": "uboot-asahi-2026.04.asahi2-1-aarch64.pkg.tar.xz",
+      "sha256": "968315a742534497eda70be19931ff6c6f774deca4d0bcd53c7f49f287424b2b",
+      "signature_sha256": "b856f7b9c5856aef21af3b8b2e2e6ed40edcfcaa7152fdcc72f9734b2947f289"
+    },
+    {
+      "name": "asahi-scripts",
+      "filename": "asahi-scripts-20260127.1-1-any.pkg.tar.xz",
+      "sha256": "e55802db3ada40123f1949469d165bb8da48da0de7ef3882c1f43d08d5be47ec",
+      "signature_sha256": "ca494685862dc696186b6cdb1ca45455a4100cbf04474165caf8204a56614a08"
+    },
+    {
+      "name": "asahi-fwextract",
+      "filename": "asahi-fwextract-0.7.9-1-any.pkg.tar.xz",
+      "sha256": "ebc8d74a42108787ff749e954af907d77c79f516c85a7403c2fa91424b701ee0",
+      "signature_sha256": "171998c0787403eb5d5a0d93b8f5dab969e450d650bde01e74f85a21834be940"
+    },
+    {
+      "name": "asahi-audio",
+      "filename": "asahi-audio-4.1-1-aarch64.pkg.tar.xz",
+      "sha256": "973916504f8a3125e99cb5ae21f69f78a410f1b6aafe3308400862d28edf3723",
+      "signature_sha256": "5139fdea8772145d83235bb0280b0743756036cbfce1ff65dcce813c30118610"
+    },
+    {
+      "name": "speakersafetyd",
+      "filename": "speakersafetyd-2.0.1-1-aarch64.pkg.tar.xz",
+      "sha256": "e42da42d442072ec182f3740747dbae9bdd34468bd8645a0294322d11a98e3cb",
+      "signature_sha256": "7dc20272f1465b86dfae955ee073c5a07266c66b7050287a65a064254dab3cd3"
+    },
+    {
+      "name": "tiny-dfr",
+      "filename": "tiny-dfr-0.3.7-1-aarch64.pkg.tar.xz",
+      "sha256": "a2d2fad527f6717ea39fdeeae0532d3e142c8024bee4b6c38287958538cead1f",
+      "signature_sha256": "6a2ac2ea1f1fdaab0ec6cb085bf8661d17b54e924028c7e7021bf331cd68432b"
+    }
+  ],
+  "verification": {
+    "package_hashes_match": true,
+    "detached_signature_hashes_match": true,
+    "detached_signatures_verified": true,
+    "verification_key_fingerprint": "12CE6799A94A3F1B5DDFFE88F576553597FB8FEB"
+  },
+  "media_readiness": {
+    "ready": false,
+    "blockers": [
+      "device-tree-selection-unimplemented",
+      "machine-firmware-handoff-unimplemented",
+      "bootaa64-assembly-unverified"
+    ]
+  }
+}

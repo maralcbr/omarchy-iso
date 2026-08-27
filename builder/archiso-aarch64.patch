@@ -9,7 +9,7 @@
      install -d -m 0755 -- "${isofs_dir}/${install_dir}/boot/${arch}"
      install -m 0644 -- "${pacstrap_dir}/boot/initramfs-"*".img" "${isofs_dir}/${install_dir}/boot/${arch}/"
 -    install -m 0644 -- "${pacstrap_dir}/boot/vmlinuz-"* "${isofs_dir}/${install_dir}/boot/${arch}/"
-+    if [[ "$arch" == 'aarch64' ]]; then
++    if [[ "$arch" == 'aarch64' && -e "${pacstrap_dir}/boot/Image" ]]; then
 +        kernel_images=("${pacstrap_dir}/boot/Image")
 +    else
 +        kernel_images=("${pacstrap_dir}"/boot/vmlinuz-*)

@@ -28,6 +28,20 @@ esac
 : "${OMARCHY_NVIM_PACKAGE:=omarchy-nvim}"
 export OMARCHY_RUNTIME_PACKAGE OMARCHY_SETTINGS_PACKAGE OMARCHY_NVIM_PACKAGE
 source /builder/architecture.sh
+if (( OMARCHY_MEDIA_TARGET_READY == 0 )); then
+  if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
+    /builder/validate-apple-platform-snapshot.sh "$OMARCHY_APPLE_PLATFORM_SNAPSHOT"
+    if [[ ${OMARCHY_APPLE_MEDIA_BUILD_PROBE:-0} == "1" ]]; then
+      echo "Building an unverified Apple media validation artifact; release use is forbidden." >&2
+    else
+      echo "The $OMARCHY_MEDIA_TARGET target has no verified disposable build-and-boot evidence" >&2
+      exit 1
+    fi
+  else
+    echo "The $OMARCHY_MEDIA_TARGET target has no verified disposable build-and-boot evidence" >&2
+    exit 1
+  fi
+fi
 
 # Build locations are needed early on ARM because its two immutable package
 # snapshots become a local signed repository before any Omarchy package is
@@ -40,11 +54,21 @@ if [[ $OMARCHY_ARCH == "aarch64" ]]; then
   source /builder/arm-package-snapshots.conf
   bash /builder/fetch-arm-package-snapshots.sh "$offline_mirror_dir"
   mapfile -t snapshot_package_names <"$offline_mirror_dir/ARM-PACKAGES"
+  if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
+    bash /builder/fetch-apple-platform-snapshot.sh "$offline_mirror_dir"
+    mapfile -t apple_package_names <"$offline_mirror_dir/APPLE-PACKAGES"
+    snapshot_package_names+=("${apple_package_names[@]}")
+  fi
   snapshot_packages=()
   for snapshot_package_name in "${snapshot_package_names[@]}"; do
     snapshot_packages+=("$offline_mirror_dir/$snapshot_package_name")
   done
-  (( ${#snapshot_packages[@]} == ARM_REPOSITORY_PACKAGE_COUNT + 6 ))
+  if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
+    apple_platform_package_count=$(jq -r '.packages | length' "$OMARCHY_APPLE_PLATFORM_SNAPSHOT")
+    (( ${#snapshot_packages[@]} == ARM_REPOSITORY_PACKAGE_COUNT + 6 + apple_platform_package_count ))
+  else
+    (( ${#snapshot_packages[@]} == ARM_REPOSITORY_PACKAGE_COUNT + 6 ))
+  fi
   repo-add "$offline_mirror_dir/arm-snapshots.db.tar.gz" "${snapshot_packages[@]}"
 fi
 
@@ -105,6 +129,15 @@ prepare_archiso_profile "$build_cache_dir"
 mkdir -p "$build_cache_dir/airootfs/usr/share/omarchy-iso"
 echo "$OMARCHY_MIRROR" > "$build_cache_dir/airootfs/root/omarchy_mirror"
 echo "$OMARCHY_ISO_REF" > "$build_cache_dir/airootfs/root/omarchy_iso_ref"
+echo "$OMARCHY_MEDIA_TARGET" > "$build_cache_dir/airootfs/usr/share/omarchy-iso/media-target"
+jq -nc \
+  --arg architecture "$OMARCHY_ARCH" \
+  --arg platform "$OMARCHY_PLATFORM" \
+  --arg boot_backend "$OMARCHY_BOOT_BACKEND" \
+  --arg artifact_kind "$OMARCHY_ARTIFACT_KIND" \
+  '{schema_version: 1, architecture: $architecture, platform: $platform,
+    boot_backend: $boot_backend, artifact_kind: $artifact_kind}' \
+  > "$build_cache_dir/airootfs/usr/share/omarchy-iso/media-target.json"
 cat > "$build_cache_dir/airootfs/usr/share/omarchy-iso/package-targets" <<EOF
 OMARCHY_RUNTIME_PACKAGE=$OMARCHY_RUNTIME_PACKAGE
 OMARCHY_SETTINGS_PACKAGE=$OMARCHY_SETTINGS_PACKAGE
@@ -118,6 +151,10 @@ if [[ $OMARCHY_ARCH == "aarch64" ]]; then
     "$build_cache_dir/airootfs/usr/share/omarchy-iso/arm-runtime"
   install -m 0644 /builder/omarchy-arm-repository.asc \
     "$build_cache_dir/airootfs/usr/share/omarchy-iso/omarchy-arm-repository.asc"
+  if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
+    install -m 0644 "$OMARCHY_APPLE_PLATFORM_SNAPSHOT" \
+      "$build_cache_dir/airootfs/usr/share/omarchy-iso/apple-platform-snapshot.json"
+  fi
 fi
 
 if [[ ${OMARCHY_INSTALL_DEBUG:-} == "1" ]]; then
@@ -127,6 +164,7 @@ if [[ ${OMARCHY_INSTALL_DEBUG:-} == "1" ]]; then
     echo "built_at=$(date -Is)"
     echo "ref=$OMARCHY_ISO_REF"
     echo "mirror=$OMARCHY_MIRROR"
+    echo "media_target=$OMARCHY_MEDIA_TARGET"
     echo "runtime_package=$OMARCHY_RUNTIME_PACKAGE"
     echo "settings_package=$OMARCHY_SETTINGS_PACKAGE"
     echo "nvim_package=$OMARCHY_NVIM_PACKAGE"
@@ -229,6 +267,13 @@ filter_target_packages <"${base_pkg_lists[1]}" >"$shipped_other_packages"
 if [[ $OMARCHY_ARCH == "aarch64" ]] && ! grep -Fxq archlinuxarm-keyring "$shipped_base_packages"; then
   printf '%s\n' archlinuxarm-keyring >>"$shipped_base_packages"
 fi
+if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
+  printf '%s\n' \
+    asahi-audio asahi-fwextract asahi-scripts grub linux-asahi \
+    linux-asahi-headers m1n1 speakersafetyd uboot-asahi \
+    >>"$shipped_base_packages"
+  sort -u -o "$shipped_base_packages" "$shipped_base_packages"
+fi
 base_pkg_lists=("$shipped_base_packages" "$shipped_other_packages")
 
 # The configurator's setup form comes from the runtime this ISO bundles, so the
@@ -308,6 +353,12 @@ if ! resolved_package_files="$(
   exit 1
 fi
 mapfile -t required_package_files <<< "$resolved_package_files"
+if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
+  # Preserve the complete signed platform snapshot in the offline mirror.
+  # tiny-dfr is deliberately not a universal target package, but an exact-model
+  # backend can install it without reaching a moving network repository.
+  required_package_files+=("${apple_package_names[@]}")
+fi
 
 # The online transaction intentionally excludes packages built from the local
 # checkouts. Add those exact artifacts back to the keep-set after verifying
@@ -420,6 +471,11 @@ cp "$build_cache_dir/pacman-offline.conf" "$build_cache_dir/airootfs/etc/pacman.
 
 # Build the ISO.
 "${MKARCHISO[@]}" -v -w "$build_cache_dir/work/" -o /out/ "$build_cache_dir/"
+
+if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
+  built_iso=$(\ls -t /out/*-aarch64.iso | head -n1)
+  /builder/verify-apple-media.sh "$built_iso" "$OMARCHY_APPLE_PLATFORM_SNAPSHOT"
+fi
 
 # Match host UID/GID on output.
 if [[ -n $HOST_UID && -n $HOST_GID ]]; then
