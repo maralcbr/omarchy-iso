@@ -486,6 +486,33 @@ cp "$build_cache_dir/pacman-offline.conf" "$build_cache_dir/airootfs/etc/pacman.
 if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
   built_iso=$(\ls -t /out/*-aarch64.iso | head -n1)
   /builder/verify-apple-media.sh "$built_iso" "$OMARCHY_APPLE_PLATFORM_SNAPSHOT"
+
+  iso_sha256=$(sha256sum -- "$built_iso")
+  iso_sha256=${iso_sha256%% *}
+  iso_size=$(wc -c <"$built_iso")
+  iso_size=${iso_size//[[:space:]]/}
+  snapshot_sha256=$(sha256sum -- "$OMARCHY_APPLE_PLATFORM_SNAPSHOT")
+  snapshot_sha256=${snapshot_sha256%% *}
+  {
+    printf '%s\n' \
+      "schema_version=1" \
+      "verification_kind=apple-build-environment" \
+      "omarchy_iso_source_commit=${OMARCHY_ISO_SOURCE_COMMIT:-unknown}" \
+      "archiso_source_commit=${OMARCHY_ARCHISO_SOURCE_COMMIT:-unknown}" \
+      "source_date_epoch=${SOURCE_DATE_EPOCH:-unknown}" \
+      "build_image=${OMARCHY_BUILD_IMAGE:-unknown}" \
+      "architecture=$OMARCHY_ARCH" \
+      "media_target=$OMARCHY_MEDIA_TARGET" \
+      "artifact_filename=${built_iso##*/}" \
+      "artifact_size=$iso_size" \
+      "artifact_sha256=$iso_sha256" \
+      "platform_snapshot_sha256=$snapshot_sha256" \
+      "uname_machine=$(uname -m)" \
+      "[container-os]"
+    cat /etc/os-release
+    echo "[build-host-packages]"
+    pacman -Q | LC_ALL=C sort
+  } >"$built_iso.apple-build-environment.txt"
 fi
 
 # Match host UID/GID on output.

@@ -209,6 +209,8 @@ if [[ -z $KEEP_PKG_CACHE ]]; then
   sudo rm -rf /var/cache/pacman/pkg/*
 fi
 git submodule update --init --recursive --jobs=8
+OMARCHY_ISO_SOURCE_COMMIT=$(git rev-parse HEAD)
+OMARCHY_ARCHISO_SOURCE_COMMIT=$(git -C archiso rev-parse HEAD)
 
 BUILD_SCRIPT="builder/build-iso.sh"
 BUILD_ROOT=$(realpath "${BASH_SOURCE[0]%/*}/..")
@@ -235,6 +237,8 @@ DOCKER_ARGS=(
   -e "OMARCHY_MEDIA_TARGET=$OMARCHY_MEDIA_TARGET"
   -e "OMARCHY_APPLE_MEDIA_BUILD_PROBE=$OMARCHY_APPLE_MEDIA_BUILD_PROBE"
   -e "OMARCHY_BUILD_IMAGE=$BUILD_IMAGE"
+  -e "OMARCHY_ISO_SOURCE_COMMIT=$OMARCHY_ISO_SOURCE_COMMIT"
+  -e "OMARCHY_ARCHISO_SOURCE_COMMIT=$OMARCHY_ARCHISO_SOURCE_COMMIT"
   -e "OMARCHY_INSTALL_DEBUG=${OMARCHY_INSTALL_DEBUG:-}"
   -e "HOST_UID=$(id -u)"
   -e "HOST_GID=$(id -g)"
@@ -286,9 +290,11 @@ if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
   iso_ref="${latest_iso%.*}-apple-silicon-$OMARCHY_ISO_REF.iso"
 fi
 mv -f "$latest_iso" "$iso_ref"
-if [[ -f $latest_iso.apple-media-evidence.json ]]; then
-  mv -f "$latest_iso.apple-media-evidence.json" "$iso_ref.apple-media-evidence.json"
-fi
+for sidecar in "$latest_iso".apple-*; do
+  [[ -f $sidecar ]] || continue
+  sidecar_suffix=${sidecar#"$latest_iso"}
+  mv -f "$sidecar" "$iso_ref$sidecar_suffix"
+done
 
 if [[ -z "${NO_BOOT_OFFER:-}" ]]; then
   echo

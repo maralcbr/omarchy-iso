@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 work=$(mktemp -d)
-trap 'rm -rf "$work"; rm -f "$ROOT"/release/omarchy-test-{x86_64,aarch64}-quattro.iso "$ROOT"/release/omarchy-test-aarch64-apple-silicon-quattro.iso "$ROOT"/release/omarchy-test-aarch64-apple-silicon-quattro.iso.apple-media-evidence.json; rmdir "$ROOT/release" 2>/dev/null || true' EXIT
+trap 'rm -rf "$work"; rm -f "$ROOT"/release/omarchy-test-{x86_64,aarch64}-quattro.iso "$ROOT"/release/omarchy-test-aarch64-apple-silicon-quattro.iso "$ROOT"/release/omarchy-test-aarch64-apple-silicon-quattro.iso.apple-media-evidence.json "$ROOT"/release/omarchy-test-aarch64-apple-silicon-quattro.iso.apple-build-environment.txt; rmdir "$ROOT/release" 2>/dev/null || true' EXIT
 apple_build_image="menci/archlinuxarm@sha256:1245992a2b371b5aeeede7dae44937ab29dc446e9e77abe263b99b02e5c1813d"
 
 mkdir -p "$work/bin" "$work/home"
@@ -34,6 +34,7 @@ done
 touch "$out/omarchy-test-$arch.iso"
 if [[ $media_target == "aarch64/apple-silicon" ]]; then
   printf 'static evidence\n' >"$out/omarchy-test-$arch.iso.apple-media-evidence.json"
+  printf 'build environment\n' >"$out/omarchy-test-$arch.iso.apple-build-environment.txt"
 fi
 STUB
 chmod +x "$work/bin/docker"
@@ -84,8 +85,11 @@ assert_arg "$work/docker-apple-validation.args" "OMARCHY_MEDIA_TARGET=aarch64/ap
 assert_arg "$work/docker-apple-validation.args" "OMARCHY_APPLE_MEDIA_BUILD_PROBE=1"
 assert_arg "$work/docker-apple-validation.args" "OMARCHY_BUILD_IMAGE=$apple_build_image"
 assert_arg "$work/docker-apple-validation.args" "$apple_build_image"
+assert_arg "$work/docker-apple-validation.args" "OMARCHY_ISO_SOURCE_COMMIT=$(git rev-parse HEAD)"
+assert_arg "$work/docker-apple-validation.args" "OMARCHY_ARCHISO_SOURCE_COMMIT=$(git -C archiso rev-parse HEAD)"
 [[ -f $ROOT/release/omarchy-test-aarch64-apple-silicon-quattro.iso ]]
 [[ -f $ROOT/release/omarchy-test-aarch64-apple-silicon-quattro.iso.apple-media-evidence.json ]]
+[[ -f $ROOT/release/omarchy-test-aarch64-apple-silicon-quattro.iso.apple-build-environment.txt ]]
 
 SOURCE_DATE_EPOCH=1787832096 run_make apple-reproducible \
   --target aarch64/apple-silicon --apple-media-validation-build
