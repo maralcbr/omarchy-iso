@@ -51,6 +51,12 @@
       "signature_sha256": "ca494685862dc696186b6cdb1ca45455a4100cbf04474165caf8204a56614a08"
     },
     {
+      "name": "asahi-bless",
+      "filename": "asahi-bless-0.4.2-1-aarch64.pkg.tar.xz",
+      "sha256": "7098c18ed6e791e84e3ae5f72c19c0bc9bd188c0743e86b3a8dcd3b607716833",
+      "signature_sha256": "278d3458d58b3b4f5f13bb49321d34c87e9d89e58381600917e41aa886e2e681"
+    },
+    {
       "name": "asahi-fwextract",
       "filename": "asahi-fwextract-0.8.4-1-any.pkg.tar.xz",
       "sha256": "a93c13ca6332a51a75b1e5c0a396c8d86a2a5b75366df3d8ea207471d825396f",
@@ -73,6 +79,36 @@
       "filename": "speakersafetyd-2.0.1-1-aarch64.pkg.tar.xz",
       "sha256": "e42da42d442072ec182f3740747dbae9bdd34468bd8645a0294322d11a98e3cb",
       "signature_sha256": "7dc20272f1465b86dfae955ee073c5a07266c66b7050287a65a064254dab3cd3"
+    },
+    {
+      "name": "asahi-desktop-meta",
+      "filename": "asahi-desktop-meta-4-8-any.pkg.tar.xz",
+      "sha256": "f9b48280ad68be0ec539937d33b5807847d37c15a5c9ca55283bb4f7828df98b",
+      "signature_sha256": "6d84d39d56441acc8b00834e3cf9fbf9fc975218a14675e34ed77b236a104dca"
+    },
+    {
+      "name": "bankstown",
+      "filename": "bankstown-1.1.0-2-aarch64.pkg.tar.xz",
+      "sha256": "d582fba1952f4015f37fefb14b09052ded8802e2d054067891280e79c9df7fe6",
+      "signature_sha256": "0b60aba18a6210f89c133e94ada7cc31dba95c8b48f741acb82d84531d3f9cfc"
+    },
+    {
+      "name": "startup-disk",
+      "filename": "startup-disk-0.1.7-1-aarch64.pkg.tar.xz",
+      "sha256": "1a5cd628ede9333ad4dca13097c4181e49dfeb78439e293ce8ad797d237c29df",
+      "signature_sha256": "54432de320ab697bca196786302148c985e36413ca9d13a9df2bb3aef1437d8c"
+    },
+    {
+      "name": "virglrenderer",
+      "filename": "virglrenderer-1.1.3.0-1-aarch64.pkg.tar.xz",
+      "sha256": "369632f768d9aca08bcff76a718a5280ac7705daed9534f1c99ce35a05efde85",
+      "signature_sha256": "71de5d2ff9dea02c520595a9690b0c30aa9ff1791c591e55a22aa7aca1a2a1cc"
+    },
+    {
+      "name": "widevine",
+      "filename": "widevine-4.10.2891.0-1-aarch64.pkg.tar.xz",
+      "sha256": "314e72e8320e412ce0ce43fe23de47c4413d2622a5670936c32bcaab7f128e11",
+      "signature_sha256": "1a5d27035a163b1b46defe79f7199f1a1b105651c6e1c18f645446287cf998df"
     },
     {
       "name": "tiny-dfr",

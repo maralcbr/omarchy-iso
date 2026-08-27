@@ -33,6 +33,7 @@ fi
 grep -Fq 'sha256sum --check --status' "$artifact_verifier"
 grep -Fq 'actual_fingerprint == "$expected_fingerprint"' "$artifact_verifier"
 grep -Fq 'gpg --batch --homedir "$verify_home" --verify' "$artifact_verifier"
+grep -Fq 'actual_package_name == "$package_name"' "$artifact_verifier"
 grep -Fq "grep -Fxq 'usr/lib/asahi-boot/m1n1.bin'" "$artifact_verifier"
 grep -Fq "grep -Fxq 'usr/lib/asahi-boot/u-boot-nodtb.bin'" "$artifact_verifier"
 grep -Fq "grep -Fxq 'usr/bin/lzfse'" "$artifact_verifier"

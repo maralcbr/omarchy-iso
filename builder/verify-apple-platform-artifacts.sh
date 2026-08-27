@@ -47,6 +47,12 @@ while IFS=$'\t' read -r package_name filename package_sha256 signature_sha256; d
   gpg --batch --homedir "$verify_home" --verify "$signature" "$package" \
     >/dev/null 2>&1
   package_listing=$(bsdtar -tf "$package")
+  actual_package_name=$(bsdtar -xOf "$package" .PKGINFO |
+    awk -F ' = ' '$1 == "pkgname" { print $2; exit }')
+  [[ $actual_package_name == "$package_name" ]] || {
+    echo "Apple platform package identity mismatch: $filename" >&2
+    exit 1
+  }
 
   case "$package_name" in
     linux-asahi)
