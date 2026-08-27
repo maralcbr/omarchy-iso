@@ -67,6 +67,18 @@ jq -e '
 ' <<<"$layout" >/dev/null
 echo "ok - exact Apple media layout produces canonical structural evidence"
 
+mkdir -p "$work/stubs"
+cat >"$work/stubs/lsinitcpio" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+[[ $* == "--nocolor --list "* ]]
+printf '%s\n' hooks/asahi usr/share/asahi-scripts/functions.sh
+STUB
+chmod +x "$work/stubs/lsinitcpio"
+PATH="$work/stubs:$PATH" verify >/dev/null
+grep -Fq 'lsinitcpio --nocolor --list' "$ROOT/builder/verify-apple-media-layout.sh"
+echo "ok - concatenated mkinitcpio images use the format-aware lister"
+
 printf 'different EFI bytes\n' >"$work/esp-BOOTAA64.EFI"
 if verify >"$work/out" 2>"$work/error"; then
   echo "mismatched ISO/ESP BOOTAA64.EFI unexpectedly passed" >&2

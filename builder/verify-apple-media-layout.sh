@@ -71,11 +71,24 @@ fi
 [[ -s $kernel ]] || { echo "Apple live kernel is empty" >&2; exit 1; }
 [[ -s $initramfs ]] || { echo "Apple live initramfs is empty" >&2; exit 1; }
 
-if ! bsdtar -tf "$initramfs" | grep -Eq '(^|/)hooks/asahi$'; then
+if command -v lsinitcpio >/dev/null; then
+  # Real mkinitcpio images start with an uncompressed early CPIO followed by the
+  # compressed main archive. bsdtar lists only that first archive; lsinitcpio
+  # understands the concatenated format. The fallback keeps synthetic unit
+  # fixtures and older single-archive images verifiable.
+  if ! initramfs_listing=$(TERM="${TERM:-dumb}" lsinitcpio --nocolor --list "$initramfs"); then
+    echo "Apple live initramfs could not be listed" >&2
+    exit 1
+  fi
+else
+  initramfs_listing=$(bsdtar -tf "$initramfs")
+fi
+
+if ! grep -Eq '(^|/)hooks/asahi$' <<<"$initramfs_listing"; then
   echo "Apple live initramfs does not contain the Asahi runtime hook" >&2
   exit 1
 fi
-if ! bsdtar -tf "$initramfs" | grep -Eq '(^|/)usr/share/asahi-scripts/functions\.sh$'; then
+if ! grep -Eq '(^|/)usr/share/asahi-scripts/functions\.sh$' <<<"$initramfs_listing"; then
   echo "Apple live initramfs does not contain Asahi firmware-mount helpers" >&2
   exit 1
 fi
