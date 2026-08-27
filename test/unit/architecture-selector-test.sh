@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"; rm -f "$ROOT"/release/omarchy-test-{x86_64,aarch64}-quattro.iso "$ROOT"/release/omarchy-test-aarch64-apple-silicon-quattro.iso "$ROOT"/release/omarchy-test-aarch64-apple-silicon-quattro.iso.apple-media-evidence.json; rmdir "$ROOT/release" 2>/dev/null || true' EXIT
+apple_build_image="menci/archlinuxarm@sha256:1245992a2b371b5aeeede7dae44937ab29dc446e9e77abe263b99b02e5c1813d"
 
 mkdir -p "$work/bin" "$work/home"
 
@@ -81,8 +82,25 @@ run_make apple-validation --target aarch64/apple-silicon --apple-media-validatio
 assert_arg "$work/docker-apple-validation.args" "OMARCHY_ARCH=aarch64"
 assert_arg "$work/docker-apple-validation.args" "OMARCHY_MEDIA_TARGET=aarch64/apple-silicon"
 assert_arg "$work/docker-apple-validation.args" "OMARCHY_APPLE_MEDIA_BUILD_PROBE=1"
+assert_arg "$work/docker-apple-validation.args" "OMARCHY_BUILD_IMAGE=$apple_build_image"
+assert_arg "$work/docker-apple-validation.args" "$apple_build_image"
 [[ -f $ROOT/release/omarchy-test-aarch64-apple-silicon-quattro.iso ]]
 [[ -f $ROOT/release/omarchy-test-aarch64-apple-silicon-quattro.iso.apple-media-evidence.json ]]
+
+SOURCE_DATE_EPOCH=1787832096 run_make apple-reproducible \
+  --target aarch64/apple-silicon --apple-media-validation-build
+assert_arg "$work/docker-apple-reproducible.args" "SOURCE_DATE_EPOCH=1787832096"
+assert_arg "$work/docker-apple-reproducible.args" "$apple_build_image"
+
+set +e
+invalid_epoch_output=$(SOURCE_DATE_EPOCH=not-a-timestamp \
+  HOME="$work/home" PATH="$work/bin:$PATH" \
+  "$BASH" "$ROOT/bin/omarchy-iso-make" --keep-pkg-cache --no-boot-offer 2>&1)
+invalid_epoch_status=$?
+set -e
+
+(( invalid_epoch_status != 0 ))
+[[ $invalid_epoch_output == *"SOURCE_DATE_EPOCH must be a non-negative integer"* ]]
 
 set +e
 invalid_output=$("$BASH" "$ROOT/bin/omarchy-iso-make" --arch sparc 2>&1)

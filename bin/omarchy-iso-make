@@ -118,6 +118,11 @@ if (( OMARCHY_APPLE_MEDIA_BUILD_PROBE )) && [[ $OMARCHY_MEDIA_TARGET != "aarch64
   exit 1
 fi
 
+if [[ -n ${SOURCE_DATE_EPOCH:-} && ! $SOURCE_DATE_EPOCH =~ ^[0-9]+$ ]]; then
+  echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2
+  exit 1
+fi
+
 case "$OMARCHY_MEDIA_TARGET" in
   x86_64/pc|aarch64/generic) ;;
   aarch64/apple-silicon)
@@ -142,7 +147,11 @@ case "$OMARCHY_ARCH" in
     BUILD_PLATFORM_ARGS=()
     ;;
   aarch64)
-    BUILD_IMAGE="menci/archlinuxarm:latest"
+    if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
+      BUILD_IMAGE="menci/archlinuxarm@sha256:1245992a2b371b5aeeede7dae44937ab29dc446e9e77abe263b99b02e5c1813d"
+    else
+      BUILD_IMAGE="menci/archlinuxarm:latest"
+    fi
     BUILD_PLATFORM_ARGS=(--platform linux/arm64)
     ;;
   *)
@@ -225,6 +234,7 @@ DOCKER_ARGS=(
   -e "OMARCHY_ARCH=$OMARCHY_ARCH"
   -e "OMARCHY_MEDIA_TARGET=$OMARCHY_MEDIA_TARGET"
   -e "OMARCHY_APPLE_MEDIA_BUILD_PROBE=$OMARCHY_APPLE_MEDIA_BUILD_PROBE"
+  -e "OMARCHY_BUILD_IMAGE=$BUILD_IMAGE"
   -e "OMARCHY_INSTALL_DEBUG=${OMARCHY_INSTALL_DEBUG:-}"
   -e "HOST_UID=$(id -u)"
   -e "HOST_GID=$(id -g)"
@@ -260,6 +270,13 @@ else
   # re-checks the registry for it, so refresh it when building cold.
   DOCKER_ARGS+=(--pull=always)
 fi
+
+if [[ -n ${SOURCE_DATE_EPOCH:-} ]]; then
+  DOCKER_ARGS+=(-e "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH")
+fi
+
+echo "Build image: $BUILD_IMAGE"
+[[ -z ${SOURCE_DATE_EPOCH:-} ]] || echo "SOURCE_DATE_EPOCH: $SOURCE_DATE_EPOCH"
 
 docker run "${BUILD_PLATFORM_ARGS[@]}" "${DOCKER_ARGS[@]}" "$BUILD_IMAGE" /$BUILD_SCRIPT
 
