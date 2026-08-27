@@ -86,6 +86,10 @@ case "$OMARCHY_ARCH" in
 esac
 
 if [[ $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" ]]; then
+  # lsinitcpio understands the early-CPIO-plus-compressed-main-archive format
+  # emitted by mkinitcpio. Generic archive readers stop after the early CPIO
+  # and falsely reject valid Asahi runtime hooks.
+  BUILD_HOST_PACKAGES+=(mkinitcpio)
   LIVE_KERNEL=linux-asahi
   LIVE_KERNEL_BOOT_NAME=vmlinuz-linux-asahi
   LIVE_INITRAMFS_BOOT_NAME=initramfs-linux-asahi.img

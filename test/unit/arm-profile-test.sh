@@ -26,6 +26,7 @@ source "$ROOT/builder/architecture.sh"
 [[ $OMARCHY_BOOT_BACKEND == "limine" ]]
 [[ $OMARCHY_ARTIFACT_KIND == "iso" ]]
 (( OMARCHY_MEDIA_TARGET_READY == 1 ))
+[[ " ${BUILD_HOST_PACKAGES[*]} " != *" mkinitcpio "* ]]
 
 apple_contract=$(
   export OMARCHY_ARCH=aarch64 OMARCHY_MEDIA_TARGET=aarch64/apple-silicon
@@ -36,6 +37,13 @@ apple_contract=$(
     "$OMARCHY_APPLE_PLATFORM_SNAPSHOT"
 )
 [[ $apple_contract == "apple-silicon|asahi-grub|iso|0|/builder/apple-platform-snapshot.json" ]]
+
+apple_build_host_packages=$(
+  export OMARCHY_ARCH=aarch64 OMARCHY_MEDIA_TARGET=aarch64/apple-silicon
+  source "$ROOT/builder/architecture.sh"
+  printf '%s\n' "${BUILD_HOST_PACKAGES[*]}"
+)
+[[ " $apple_build_host_packages " == *" mkinitcpio "* ]]
 
 apple_live_profile=$(
   export OMARCHY_ARCH=aarch64 OMARCHY_MEDIA_TARGET=aarch64/apple-silicon
