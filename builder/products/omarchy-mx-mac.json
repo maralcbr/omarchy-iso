@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "product_id": "omarchy-mx-mac",
+  "name": "Omarchy MX Mac",
+  "default_os_name": "Omarchy",
+  "package_filename": "omarchy-2026.09.01-aarch64-apple-silicon-asahi-os-package.zip",
+  "esp_size_bytes": 524288000,
+  "esp_volume_id": "0x4f4d5801",
+  "boot_size_bytes": 2147483648,
+  "boot_filesystem_uuid": "4f4d5801-424f-4f54-8000-000000000001",
+  "root_size_bytes": 34359738368,
+  "root_filesystem_uuid": "4f4d5801-524f-4f54-8000-000000000001",
+  "boot_backend": "asahi-grub",
+  "branding": {
+    "m1n1_boot_sha256": "28c76ee3eb046a903db81277ad8f7ab887059b2fa522eacb47445c7f8868288b",
+    "volume_icon_member": "omarchy-volume.icns",
+    "volume_icon_sha256": "cf26ed5d2831db99c00d62ca046040e01a18e08e63363d629340d04ac6ec8c23",
+    "volume_icon_size_bytes": 42899
+  },
+  "kernel_package": "linux-asahi",
+  "supported_fw": [
+    "13.5",
+    "14.8.3"
+  ],
+  "uefi_payload": {
+    "filename": "uefi-only-20260810-asahi-7.1.6-1.zip",
+    "url": "https://cdn.asahilinux.org/os/uefi-only-20260810-asahi-7.1.6-1.zip",
+    "size_bytes": 1005310,
+    "sha256": "80e3826665ba92380c32fbab3a0f8e4b5e738941d4baecb7a3d91b1894e4f699"
+  }
+}

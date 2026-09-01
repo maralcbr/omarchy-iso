@@ -1,0 +1,467 @@
+{
+  "schema_version": 1,
+  "common_producer_inputs": [
+    "builder/asahi_stage_inputs.py",
+    "builder/build-asahi-os-package.sh",
+    "builder/asahi-package-dispatch.sh"
+  ],
+  "common_admission_inputs": [
+    "builder/asahi_checkpoint.py",
+    "builder/asahi_checkpoint_plan.py",
+    "builder/asahi_source_impact.py"
+  ],
+  "stage_order": [
+    "builder-toolchain",
+    "verified-package-cache",
+    "offline-repository-database",
+    "base-images",
+    "configured-target",
+    "finalized-boot",
+    "sealed-release-package",
+    "installer-metadata"
+  ],
+  "stages": {
+    "builder-toolchain": {
+      "depends_on": [],
+      "dispatches": [
+        "bin/omarchy-iso-boot",
+        "builder/build-iso.sh",
+        "builder/pinned-node-cache.py"
+      ],
+      "runtime_inputs": [],
+      "runtime_settings": [],
+      "entrypoints": [
+        "builder/ensure-asahi-toolchain-image.sh"
+      ],
+      "control_entrypoints": [
+        "bin/omarchy-iso-make",
+        "builder/asahi-lifecycle-lease.py"
+      ],
+      "source_paths": [
+        "builder/ensure-asahi-toolchain-image.sh",
+        "builder/asahi_toolchain_metadata.py",
+        "builder/sha256-adapter.sh",
+        "builder/asahi-toolchain.Containerfile"
+      ],
+      "admission_paths": [
+        "bin/omarchy-iso-make",
+        "builder/asahi-lifecycle-lease.py",
+        "builder/pinned-node-cache.py",
+        "builder/asahi-stage-inputs.json",
+        "builder/asahi-build-lock.json",
+        "builder/products/omarchy-mx-mac.json",
+        "configs/profiledef.sh"
+      ],
+      "lock_paths": [
+        "builder"
+      ]
+    },
+    "verified-package-cache": {
+      "depends_on": [
+        "builder-toolchain"
+      ],
+      "dispatches": [
+        "archiso/archiso/mkarchiso",
+        "bin/omarchy-iso-boot",
+        "builder/asahi-build-reporting.sh",
+        "builder/asahi-checkpoint-admission.sh",
+        "builder/asahi-package-dispatch.sh",
+        "builder/asahi-release-publication.py",
+        "builder/asahi-stages/base-images.sh",
+        "builder/asahi-stages/configured-runtime-inputs.sh",
+        "builder/asahi-stages/configured-target.sh",
+        "builder/asahi-stages/finalized-boot.sh",
+        "builder/asahi-stages/finalized-runtime-inputs.sh",
+        "builder/asahi-stages/image-runtime.sh",
+        "builder/asahi-stages/installer-metadata.sh",
+        "builder/asahi-stages/sealed-release-package.sh",
+        "builder/asahi_runtime_projection.py",
+        "builder/build-asahi-os-package.sh",
+        "builder/checkpoint-offline-repository-database.sh",
+        "builder/ensure-asahi-toolchain-image.sh",
+        "builder/prepare-asahi-pacman-config.sh",
+        "builder/summarize-asahi-build.py",
+        "builder/verify-apple-media.sh",
+        "builder/verify-asahi-offline-repository-view.py"
+      ],
+      "runtime_inputs": [],
+      "runtime_settings": [
+        "OMARCHY_ARCH",
+        "OMARCHY_ARTIFACT_KIND",
+        "OMARCHY_ISO_REF",
+        "OMARCHY_MEDIA_TARGET",
+        "OMARCHY_MIRROR",
+        "OMARCHY_NVIM_PACKAGE",
+        "OMARCHY_RUNTIME_PACKAGE",
+        "OMARCHY_SETTINGS_PACKAGE"
+      ],
+      "entrypoints": [
+        "builder/asahi-stages/verified-package-cache.sh",
+        "builder/checkpoint-verified-package-cache.sh",
+        "builder/fetch-arm-package-snapshots.sh",
+        "builder/fetch-apple-platform-snapshot.sh",
+        "builder/install-apple-platform-keyring.sh",
+        "builder/pinned-node-cache.py"
+      ],
+      "control_entrypoints": [
+        "bin/omarchy-iso-make",
+        "builder/asahi-lifecycle-lease.py",
+        "builder/build-iso.sh",
+        "builder/archiso-media-output.sh",
+        "builder/asahi-early-checkpoint-admission.sh"
+      ],
+      "source_paths": [
+        "builder/asahi-stages/verified-package-cache.sh",
+        "builder/package-architecture.sh",
+        "builder/epochrealtime-stage-timing.sh",
+        "builder/archinstall.packages",
+        "builder/arm-package-snapshots.conf",
+        "builder/apple-platform-snapshot.json",
+        "builder/fetch-arm-package-snapshots.sh",
+        "builder/fetch-apple-platform-snapshot.sh",
+        "builder/install-apple-platform-keyring.sh",
+        "builder/validate-apple-platform-snapshot.sh",
+        "builder/verify-apple-platform-artifacts.sh",
+        "builder/build-omarchy-packages.sh",
+        "builder/prune-offline-mirror.sh",
+        "builder/capture-asahi-offline-repository.py",
+        "builder/checkpoint-verified-package-cache.sh",
+        "builder/pinned-node-cache.py",
+        "builder/sha256-adapter.sh",
+        "builder/omarchy-arm-repository.asc",
+        "builder/omarchy-arm-runtime.asc",
+        "builder/omarchy.gpg",
+        "configs/pacman-online-arm.conf",
+        "archiso/configs/releng/packages.x86_64"
+      ],
+      "admission_paths": [
+        "bin/omarchy-iso-make",
+        "builder/asahi-lifecycle-lease.py",
+        "builder/asahi_toolchain_metadata.py",
+        "builder/asahi-stage-inputs.json",
+        "builder/asahi-build-lock.json",
+        "builder/architecture.sh",
+        "builder/archiso-media-output.sh",
+        "builder/archiso-aarch64.patch",
+        "builder/build-iso.sh",
+        "builder/asahi-early-checkpoint-admission.sh",
+        "builder/file-mode-adapter.sh",
+        "builder/products/omarchy-mx-mac.json",
+        "configs/profiledef.sh"
+      ],
+      "lock_paths": [
+        "node"
+      ]
+    },
+    "offline-repository-database": {
+      "depends_on": [
+        "verified-package-cache"
+      ],
+      "dispatches": [],
+      "runtime_inputs": [],
+      "runtime_settings": [
+        "OMARCHY_ARTIFACT_KIND",
+        "OMARCHY_MEDIA_TARGET"
+      ],
+      "entrypoints": [
+        "builder/checkpoint-offline-repository-database.sh"
+      ],
+      "control_entrypoints": [
+        "builder/apply-asahi-checkpoint-rekey.py",
+        "builder/asahi-early-checkpoint-admission.sh"
+      ],
+      "source_paths": [
+        "builder/capture-asahi-offline-repository.py",
+        "builder/checkpoint-offline-repository-database.sh",
+        "builder/ensure-offline-repository-links.sh",
+        "builder/normalize-repository-database.py"
+      ],
+      "admission_paths": [
+        "builder/asahi-stage-inputs.json",
+        "builder/apply-asahi-checkpoint-rekey.py",
+        "builder/asahi-early-checkpoint-admission.sh",
+        "builder/file-mode-adapter.sh",
+        "builder/sha256-adapter.sh"
+      ],
+      "lock_paths": []
+    },
+    "base-images": {
+      "depends_on": [
+        "offline-repository-database"
+      ],
+      "dispatches": [
+        "builder/asahi-build-reporting.sh",
+        "builder/asahi-stages/configured-target.sh",
+        "builder/asahi-stages/finalized-boot.sh",
+        "builder/asahi-stages/image-runtime.sh",
+        "builder/asahi-stages/installer-metadata.sh",
+        "builder/asahi-stages/sealed-release-package.sh",
+        "builder/asahi_runtime_projection.py",
+        "builder/pinned-node-cache.py",
+        "builder/prepare-asahi-pacman-config.sh",
+        "builder/summarize-asahi-build.py",
+        "builder/verify-asahi-offline-repository-view.py"
+      ],
+      "runtime_inputs": [],
+      "runtime_settings": [],
+      "entrypoints": [
+        "builder/asahi-stages/base-images.sh",
+        "builder/build-asahi-os-package.sh",
+        "builder/asahi-package-dispatch.sh"
+      ],
+      "control_entrypoints": [
+        "builder/asahi-checkpoint-admission.sh",
+        "builder/asahi-lifecycle-lease.py",
+        "builder/asahi-release-publication.py"
+      ],
+      "source_paths": [
+        "builder/asahi-stages/base-images.sh"
+      ],
+      "admission_paths": [
+        "builder/asahi-stage-inputs.json",
+        "builder/asahi-build-lock.json",
+        "builder/asahi-checkpoint-admission.sh",
+        "builder/asahi-cache-hit-policy.sh",
+        "builder/asahi-lifecycle-lease.py",
+        "builder/asahi-release-publication.py",
+        "builder/products/omarchy-mx-mac.json"
+      ],
+      "lock_paths": [
+        "modes.$mode.esp_size_bytes",
+        "modes.$mode.boot_size_bytes",
+        "modes.$mode.root_size_bytes"
+      ]
+    },
+    "configured-target": {
+      "depends_on": [
+        "base-images",
+        "offline-repository-database"
+      ],
+      "dispatches": [],
+      "runtime_inputs": [
+        {
+          "path": "expected-package-closure",
+          "required": true
+        },
+        {
+          "path": "expected-packages",
+          "required": true
+        },
+        {
+          "path": "install-debug",
+          "required": false
+        },
+        {
+          "path": "omarchy-base.packages",
+          "required": true
+        },
+        {
+          "path": "package-targets",
+          "required": true
+        }
+      ],
+      "runtime_settings": [
+        "OMARCHY_INSTALL_DEBUG",
+        "OMARCHY_ISO_REF",
+        "OMARCHY_MIRROR",
+        "OMARCHY_NVIM_PACKAGE",
+        "OMARCHY_OFFLINE_MIRROR_ROOT",
+        "OMARCHY_RUNTIME_PACKAGE",
+        "OMARCHY_SETTINGS_PACKAGE"
+      ],
+      "entrypoints": [
+        "builder/asahi_runtime_projection.py",
+        "builder/asahi-stages/configured-runtime-inputs.sh",
+        "builder/asahi-stages/image-runtime.sh",
+        "builder/asahi-stages/configured-target.sh",
+        "builder/capture-asahi-configured-target.py",
+        "builder/run-asahi-configured-stage.py",
+        "builder/prepare-asahi-pacman-config.sh"
+      ],
+      "control_entrypoints": [
+        "builder/asahi-checkpoint-admission.sh",
+        "builder/verify-asahi-offline-repository-view.py"
+      ],
+      "source_paths": [
+        "builder/asahi_runtime_projection.py",
+        "builder/asahi-stages/configured-runtime-inputs.sh",
+        "builder/asahi-stages/image-runtime.sh",
+        "builder/asahi-stages/configured-target.sh",
+        "builder/capture-asahi-configured-target.py",
+        "builder/run-asahi-configured-stage.py",
+        "builder/asahi_orchestrator_runner.py",
+        "builder/asahi_orchestrator_configured.py",
+        "builder/prepare-asahi-pacman-config.sh",
+        "configs/pacman-offline.conf",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/__init__.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/archinstall_adapter.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/command.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/context.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/keyboard.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/phases.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/configured_phases.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/target_packages.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/ui.py"
+      ],
+      "admission_paths": [
+        "builder/asahi-checkpoint-admission.sh",
+        "builder/asahi-cache-hit-policy.sh",
+        "builder/verify-asahi-offline-repository-view.py"
+      ],
+      "lock_paths": []
+    },
+    "finalized-boot": {
+      "depends_on": [
+        "configured-target"
+      ],
+      "dispatches": [],
+      "runtime_inputs": [
+        {
+          "path": "arm-repository",
+          "required": true
+        },
+        {
+          "path": "arm-runtime",
+          "required": true
+        },
+        {
+          "path": "install-debug",
+          "required": false
+        },
+        {
+          "path": "expected-packages",
+          "required": true
+        },
+        {
+          "path": "omarchy-arm-repository.asc",
+          "required": true
+        }
+      ],
+      "runtime_settings": [
+        "OMARCHY_INSTALL_DEBUG",
+        "OMARCHY_ISO_REF",
+        "OMARCHY_MIRROR",
+        "OMARCHY_NVIM_PACKAGE",
+        "OMARCHY_OFFLINE_MIRROR_ROOT",
+        "OMARCHY_RUNTIME_PACKAGE",
+        "OMARCHY_SETTINGS_PACKAGE",
+        "SOURCE_DATE_EPOCH"
+      ],
+      "entrypoints": [
+        "builder/asahi-stages/finalized-runtime-inputs.sh",
+        "builder/asahi-stages/finalized-boot.sh",
+        "builder/run-asahi-finalized-stage.py",
+        "builder/brand-apple-silicon-boot.py",
+        "builder/capture-asahi-os-package-contents.py",
+        "builder/verify-asahi-installed-system.py",
+        "builder/omarchy-apple-installed-verify",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/asahi_boot.py"
+      ],
+      "control_entrypoints": [
+        "builder/asahi-checkpoint-admission.sh"
+      ],
+      "source_paths": [
+        "builder/asahi-stages/finalized-runtime-inputs.sh",
+        "builder/asahi-stages/finalized-boot.sh",
+        "builder/omarchy-arm-repository.asc",
+        "configs/airootfs/usr/share/omarchy-iso/pacman-online-installed-arm.conf",
+        "builder/brand-apple-silicon-boot.py",
+        "builder/branding/branding-manifest.json",
+        "builder/branding/omarchy-logo.png",
+        "builder/branding/bootlogo_48.bin",
+        "builder/branding/bootlogo_128.bin",
+        "builder/branding/bootlogo_256.bin",
+        "builder/run-asahi-finalized-stage.py",
+        "builder/asahi_orchestrator_runner.py",
+        "builder/asahi_orchestrator_finalized.py",
+        "builder/capture-asahi-os-package-contents.py",
+        "builder/verify-asahi-installed-system.py",
+        "builder/omarchy-apple-installed-verify",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/__init__.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/archinstall_adapter.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/asahi_boot.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/command.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/context.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/keyboard.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/phases.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/configured_phases.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/finalized_phases.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/target_packages.py",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/ui.py"
+      ],
+      "admission_paths": [
+        "builder/asahi-checkpoint-admission.sh",
+        "builder/asahi-cache-hit-policy.sh"
+      ],
+      "lock_paths": []
+    },
+    "sealed-release-package": {
+      "depends_on": [
+        "finalized-boot"
+      ],
+      "dispatches": [],
+      "runtime_inputs": [],
+      "runtime_settings": [],
+      "entrypoints": [
+        "builder/asahi-stages/sealed-release-package.sh"
+      ],
+      "control_entrypoints": [
+        "builder/asahi-checkpoint-admission.sh"
+      ],
+      "source_paths": [
+        "builder/asahi-stages/sealed-release-package.sh",
+        "builder/branding/branding-manifest.json",
+        "builder/branding/omarchy-volume.icns"
+      ],
+      "admission_paths": [
+        "builder/asahi-checkpoint-admission.sh",
+        "builder/asahi-cache-hit-policy.sh"
+      ],
+      "lock_paths": [
+        "compression"
+      ]
+    },
+    "installer-metadata": {
+      "depends_on": [
+        "sealed-release-package",
+        "finalized-boot"
+      ],
+      "dispatches": [],
+      "runtime_inputs": [],
+      "runtime_settings": [],
+      "entrypoints": [
+        "builder/asahi-stages/installer-metadata.sh",
+        "builder/verify-asahi-os-package.py"
+      ],
+      "control_entrypoints": [
+        "archiso/archiso/mkarchiso",
+        "bin/omarchy-iso-boot",
+        "builder/asahi-build-reporting.sh",
+        "builder/asahi-checkpoint-admission.sh",
+        "builder/prune-asahi-checkpoints.py",
+        "builder/summarize-asahi-build.py",
+        "builder/verify-apple-media.sh"
+      ],
+      "source_paths": [
+        "builder/asahi-stages/installer-metadata.sh",
+        "builder/apple-platform-snapshot.json",
+        "builder/verify-asahi-os-package.py",
+        "builder/capture-asahi-os-package-contents.py",
+        "builder/products/omarchy-mx-mac.json"
+      ],
+      "admission_paths": [
+        "archiso/archiso/mkarchiso",
+        "bin/omarchy-iso-boot",
+        "builder/asahi-build-reporting.sh",
+        "builder/asahi-checkpoint-admission.sh",
+        "builder/asahi-cache-hit-policy.sh",
+        "builder/prune-asahi-checkpoints.py",
+        "builder/summarize-asahi-build.py",
+        "builder/verify-apple-media.sh",
+        "builder/verify-apple-media-layout.sh",
+        "builder/validate-apple-platform-snapshot.sh"
+      ],
+      "lock_paths": []
+    }
+  }
+}

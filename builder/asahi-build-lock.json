@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "builder": {
+    "base_image": "menci/archlinuxarm@sha256:1245992a2b371b5aeeede7dae44937ab29dc446e9e77abe263b99b02e5c1813d",
+    "maximum_workers": 10,
+    "toolchain_packages": [
+      "arch-install-scripts",
+      "archinstall",
+      "archlinuxarm-keyring",
+      "base-devel",
+      "btrfs-progs",
+      "dosfstools",
+      "e2fsprogs",
+      "findutils",
+      "git",
+      "grub",
+      "gzip",
+      "imagemagick",
+      "jq",
+      "libarchive",
+      "libisoburn",
+      "mkinitcpio",
+      "mtools",
+      "neovim",
+      "nodejs",
+      "npm",
+      "openssl",
+      "pacman",
+      "python",
+      "sed",
+      "squashfs-tools",
+      "sudo",
+      "tree-sitter-cli"
+    ]
+  },
+  "node": {
+    "version": "26.8.1",
+    "filename": "node-v26.8.1-linux-arm64.tar.gz",
+    "url": "https://nodejs.org/dist/v26.8.1/node-v26.8.1-linux-arm64.tar.gz",
+    "size_bytes": 62035643,
+    "sha256": "d5f973ce975e4bd03e6c2038260f7e9201615aa8e1ee293c72f8dcc2a6d9fddb"
+  },
+  "compression": {
+    "format": "bsdtar-zip",
+    "workers": 1,
+    "deterministic_multi_worker_proven": false
+  },
+  "retention": {
+    "maximum_allocated_bytes": 274877906944,
+    "maximum_checkpoints_per_stage": 3
+  },
+  "modes": {
+    "qualification": {
+      "catalog_eligible": true,
+      "release_compression": true,
+      "esp_size_bytes": 524288000,
+      "boot_size_bytes": 2147483648,
+      "root_size_bytes": 34359738368,
+      "required_verification": [
+        "complete-package-verifier",
+        "installed-content-evidence",
+        "partition-read-back",
+        "local-active-gates",
+        "exact-quattro-gates",
+        "physical-m1"
+      ]
+    },
+    "diagnostic": {
+      "catalog_eligible": false,
+      "release_compression": false,
+      "esp_size_bytes": 524288000,
+      "boot_size_bytes": 1073741824,
+      "root_size_bytes": 17179869184,
+      "required_verification": [
+        "configured-target",
+        "kernel-initramfs-grub",
+        "checkpoint-integrity"
+      ]
+    }
+  },
+  "stages": [
+    "builder-toolchain",
+    "verified-package-cache",
+    "offline-repository-database",
+    "base-images",
+    "configured-target",
+    "finalized-boot",
+    "sealed-release-package",
+    "installer-metadata"
+  ]
+}

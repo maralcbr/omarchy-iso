@@ -79,7 +79,10 @@ if ! cmp -s -- "$snapshot" "$shipped_snapshot"; then
   echo "Live root does not contain the exact pinned Apple platform snapshot" >&2
   exit 1
 fi
-"${BASH_SOURCE[0]%/*}/validate-apple-platform-snapshot.sh" "$snapshot" >/dev/null
+snapshot_verifier=/builder/validate-apple-platform-snapshot.sh
+[[ -x $snapshot_verifier ]] ||
+  snapshot_verifier="${BASH_SOURCE[0]%/*}/validate-apple-platform-snapshot.sh"
+"$snapshot_verifier" "$snapshot" >/dev/null
 
 if ! cmp -s -- "$iso_bootaa64" "$esp_bootaa64"; then
   echo "ISO9660 and appended-ESP BOOTAA64.EFI bytes differ" >&2

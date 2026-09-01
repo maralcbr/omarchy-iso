@@ -1,0 +1,139 @@
+#!/bin/bash
+
+# omarchy:summary=Verify an installed Apple Silicon system against its build evidence
+# omarchy:hidden=true
+
+# The build installs this into /usr/bin on the target, where Omarchy's command
+# router picks it up. Without this metadata it is an undocumented command and
+# `omarchy commands --check` fails on the installed system.
+
+set -euo pipefail
+
+root=${OMARCHY_VERIFY_ROOT:-}
+marker="$root/usr/share/omarchy/apple-silicon-full-os"
+pending="$root/var/lib/omarchy/provisioning/pending"
+apfs_guid=7c3457ef-0000-11aa-aa11-00306543ecac
+apfs_recovery_guid=52637672-7900-11aa-aa11-00306543ecac
+
+fail() {
+  echo "Omarchy Apple installed-system verification failed: $*" >&2
+  exit 1
+}
+
+if [[ -n $root ]]; then
+  [[ $root == /* && -d $root && ! -L $root ]] ||
+    fail "verification root is unsafe"
+fi
+[[ -f $marker && ! -L $marker ]] || fail "full-OS marker is unavailable"
+grep -Fxq 'schema_version=1' "$marker" || fail "full-OS marker schema changed"
+grep -Fxq 'product_id=omarchy-mx-mac' "$marker" || fail "full-OS product changed"
+grep -Fxq 'mode=installed-full-os' "$marker" || fail "full-OS mode changed"
+[[ ! -e $pending && ! -L $pending ]] || fail "owner provisioning is still pending"
+
+architecture=$(uname -m)
+kernel_release=$(uname -r)
+[[ $architecture == aarch64 ]] || fail "running architecture is not aarch64"
+[[ $kernel_release == *ARCH* ]] || fail "running kernel is not the packaged Arch kernel"
+
+model_file="$root/proc/device-tree/model"
+compatible_file="$root/proc/device-tree/compatible"
+[[ -r $model_file && -r $compatible_file ]] || fail "Apple device tree is unavailable"
+model=$(tr -d '\0' <"$model_file")
+compatible_json=$(tr '\0' '\n' <"$compatible_file" |
+  jq -Rsc 'split("\n") | map(select(length > 0))')
+jq -e '
+  index("apple,arm-platform") != null and
+  any(.[]; startswith("apple,j"))
+' <<<"$compatible_json" >/dev/null || fail "device tree is not Apple Silicon"
+
+mount_record() {
+  local target=$1 expected_type=$2 role=$3 source filesystem
+  read -r source filesystem < <(
+    findmnt -rn -o SOURCE,FSTYPE --target "$target"
+  ) || fail "$role filesystem is unavailable"
+  [[ $source == /dev/nvme* ]] || fail "$role is not on internal NVMe"
+  [[ $filesystem == "$expected_type" ]] || fail "$role filesystem is not $expected_type"
+  jq -n --arg source "$source" --arg type "$filesystem" '{source: $source, type: $type}'
+}
+
+root_mount=$(mount_record "${root:-/}" btrfs root)
+boot_mount=$(mount_record "$root/boot" ext4 boot)
+esp_mount=$(mount_record "$root/boot/efi" vfat ESP)
+
+linux_package=$(pacman -Q linux-asahi 2>/dev/null) || fail "linux-asahi package is unavailable"
+[[ -s $root/usr/bin/omarchy && ! -L $root/usr/bin/omarchy ]] ||
+  fail "Omarchy runtime is unavailable"
+
+required_artifacts=(
+  boot/efi/m1n1/boot.bin
+  boot/efi/EFI/BOOT/BOOTAA64.EFI
+  boot/grub/grub.cfg
+  boot/vmlinuz-linux-asahi
+  boot/initramfs-linux-asahi.img
+)
+artifacts_json='{}'
+for relative in "${required_artifacts[@]}"; do
+  path="$root/$relative"
+  [[ -f $path && ! -L $path && -s $path ]] || fail "boot artifact is unavailable: /$relative"
+  digest=$(sha256sum "$path")
+  digest=${digest%% *}
+  size=$(wc -c <"$path")
+  artifacts_json=$(jq \
+    --arg path "/$relative" \
+    --arg digest "$digest" \
+    --argjson size "$size" \
+    '. + {($path): {size_bytes: $size, sha256: $digest}}' \
+    <<<"$artifacts_json")
+done
+grep -Fq 'Omarchy' "$root/boot/grub/grub.cfg" || fail "GRUB configuration is not branded"
+grep -Fq 'linux-asahi' "$root/boot/grub/grub.cfg" || fail "GRUB configuration lacks linux-asahi"
+
+apfs_partition_count=0
+apfs_recovery_partition_count=0
+while IFS= read -r part_type; do
+  case ${part_type,,} in
+    "$apfs_guid") ((apfs_partition_count += 1)) ;;
+    "$apfs_recovery_guid") ((apfs_recovery_partition_count += 1)) ;;
+  esac
+done < <(lsblk -nr -o PARTTYPE)
+(( apfs_partition_count >= 2 )) || fail "expected macOS and stub APFS containers"
+(( apfs_recovery_partition_count >= 1 )) || fail "expected retained macOS Recovery partition"
+
+jq -n \
+  --arg product_id omarchy-mx-mac \
+  --arg model "$model" \
+  --argjson compatible "$compatible_json" \
+  --arg architecture "$architecture" \
+  --arg release "$kernel_release" \
+  --arg package "$linux_package" \
+  --argjson root_mount "$root_mount" \
+  --argjson boot_mount "$boot_mount" \
+  --argjson esp_mount "$esp_mount" \
+  --argjson artifacts "$artifacts_json" \
+  --argjson apfs_partition_count "$apfs_partition_count" \
+  --argjson apfs_recovery_partition_count "$apfs_recovery_partition_count" \
+  '{
+    schema_version: 1,
+    verification_kind: "omarchy-apple-installed-system",
+    product_id: $product_id,
+    device_tree: {model: $model, compatible: $compatible},
+    kernel: {
+      architecture: $architecture,
+      release: $release,
+      package: "linux-asahi",
+      package_record: $package
+    },
+    filesystems: {root: $root_mount, boot: $boot_mount, esp: $esp_mount},
+    artifacts: $artifacts,
+    apple_partition_layout: {
+      apfs_container_count: $apfs_partition_count,
+      apfs_recovery_count: $apfs_recovery_partition_count
+    },
+    checks: {
+      full_os_marker: true,
+      provisioning_completed: true,
+      boot_chain_present: true,
+      apfs_partitions_retained: true,
+      macos_boot_verification_required: true
+    }
+  }'

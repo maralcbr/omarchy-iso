@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "source_logo": {
+    "filename": "omarchy-logo.png",
+    "size_bytes": 1555,
+    "sha256": "edd69e61d711d8b423555f27a5afc64935c299f6e7f779112d2ce970ec0236e4"
+  },
+  "volume_icon": {
+    "filename": "omarchy-volume.icns",
+    "size_bytes": 42899,
+    "sha256": "cf26ed5d2831db99c00d62ca046040e01a18e08e63363d629340d04ac6ec8c23",
+    "representations": [
+      {
+        "height": 16,
+        "sha256": "c579bee3edc03cb9c781685726dbcbbb9beb5694b9b9185a00b1ee115dce0135",
+        "tag": "icp4",
+        "width": 16
+      },
+      {
+        "height": 32,
+        "sha256": "dfc88e962614ea583839210ff2a7d348bf2eaa5cd64cc838f44238eb17c46e7f",
+        "tag": "icp5",
+        "width": 32
+      },
+      {
+        "height": 64,
+        "sha256": "1b8c7c655594ad1ff729da8703c006b1fbc3fd370c89196839c4e6759e83b50f",
+        "tag": "icp6",
+        "width": 64
+      },
+      {
+        "height": 128,
+        "sha256": "54a320af40e603071d50b2800a20a6508295b535d78922cd7bb23e8547babd38",
+        "tag": "ic07",
+        "width": 128
+      },
+      {
+        "height": 256,
+        "sha256": "ead0e26bdf51cbb9f97f3c10bc394d71e943442cb09f923571946949fef7c90b",
+        "tag": "ic08",
+        "width": 256
+      },
+      {
+        "height": 512,
+        "sha256": "ac368b87249d34291e82f522e67b49dcc49e9d6000189b5da49835380310e9a1",
+        "tag": "ic09",
+        "width": 512
+      },
+      {
+        "height": 1024,
+        "sha256": "089bd42db02cd8c8568f8eec3a39470d89fceb6f0964d1d05b91a73185edfca5",
+        "tag": "ic10",
+        "width": 1024
+      }
+    ]
+  },
+  "m1n1": {
+    "input": {
+      "sha256": "bb6829c44d8de26d6615406b41edc0beef2254766b5ed114afad2029db7ae856",
+      "size_bytes": 6205289
+    },
+    "output": {
+      "sha256": "28c76ee3eb046a903db81277ad8f7ab887059b2fa522eacb47445c7f8868288b",
+      "size_bytes": 6205289
+    },
+    "replacements": [
+      {
+        "offset": 458752,
+        "replacement": {
+          "filename": "bootlogo_48.bin",
+          "sha256": "6668050653645711ad7523fe2abeb4cbe85a92c875f3eec754b6db23cea2191c",
+          "size_bytes": 9216
+        },
+        "size_bytes": 9216,
+        "source_sha256": "c39a2873d22ab2a2de8e87a6f848d636580e35894631f387d556bcee38715e9c"
+      },
+      {
+        "offset": 467968,
+        "replacement": {
+          "filename": "bootlogo_128.bin",
+          "sha256": "b19cb017645c7a9068ea0be9b6bb394131d7ca11b28093cf6caa1ffca74b0a4e",
+          "size_bytes": 65536
+        },
+        "size_bytes": 65536,
+        "source_sha256": "4a818d20543f4314b23c421eee21fe2498b1852927d262ad3d48796517f83652"
+      },
+      {
+        "offset": 533504,
+        "replacement": {
+          "filename": "bootlogo_256.bin",
+          "sha256": "9c659b392aacfa31c62c638003d2257abfdbe17919b5c90cde4c4e62f87addab",
+          "size_bytes": 262144
+        },
+        "size_bytes": 262144,
+        "source_sha256": "21555fcd7cc1400c5b459252607c30187ca9c1f65b906561400f16edd1b1220c"
+      }
+    ]
+  }
+}

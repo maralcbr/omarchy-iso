@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "metric": "observed-wall-seconds",
+  "unavailable_stages": {
+    "verified-package-cache": {
+      "reason": "The recorded cache-miss elapsed value was 0.0 seconds and is not a credible rebuild-duration observation.",
+      "source": "release/build-evidence/20260828T122347Z-80938/build-report.json",
+      "run_id": "20260828T122347Z-80938"
+    }
+  },
+  "stages": {
+    "offline-repository-database": {
+      "seconds": 111.0,
+      "source": "release/build-evidence/20260828T122347Z-80938/build-report.json",
+      "run_id": "20260828T122347Z-80938"
+    },
+    "configured-target": {
+      "seconds": 123.0,
+      "source": "release/build-evidence/20260828T122347Z-80938/build-report.json",
+      "run_id": "20260828T122347Z-80938"
+    },
+    "finalized-boot": {
+      "seconds": 34.0,
+      "source": "release/build-evidence/20260828T122347Z-80938/build-report.json",
+      "run_id": "20260828T122347Z-80938"
+    },
+    "sealed-release-package": {
+      "seconds": 170.0,
+      "source": "/private/tmp/omarchy-mx-mac-candidate-v6.dAdjKV/package/build-evidence/candidate-v6-seal-only-qualification-20260829/build-report.json",
+      "run_id": "candidate-v6-seal-only-qualification-20260829"
+    },
+    "installer-metadata": {
+      "seconds": 42.0,
+      "source": "/private/tmp/omarchy-mx-mac-candidate-v6.dAdjKV/package/build-evidence/candidate-v6-seal-only-qualification-20260829/build-report.json",
+      "run_id": "candidate-v6-seal-only-qualification-20260829"
+    }
+  }
+}

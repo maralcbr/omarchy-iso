@@ -64,8 +64,11 @@ esp_bootaa64="$work/esp-BOOTAA64.EFI"
 dd if="$iso" of="$esp_image" bs="$sector_size" skip="$esp_start" count="$esp_size" status=none
 mcopy -i "$esp_image" ::/EFI/BOOT/BOOTAA64.EFI "$esp_bootaa64"
 
+layout_verifier=/builder/verify-apple-media-layout.sh
+[[ -x $layout_verifier ]] ||
+  layout_verifier="${BASH_SOURCE[0]%/*}/verify-apple-media-layout.sh"
 layout=$(
-  "${BASH_SOURCE[0]%/*}/verify-apple-media-layout.sh" \
+  "$layout_verifier" \
     "$iso_tree" "$airootfs" "$esp_bootaa64" "$snapshot"
 )
 iso_sha256=$(sha256sum -- "$iso")

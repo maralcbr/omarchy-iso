@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# Validate the installed-system configuration inside a built Apple Silicon
+# root.img/boot.img pair without Apple hardware and without mutating either
+# image. The images are attached read-only inside the pinned aarch64 toolchain
+# container and builder/verify-asahi-installed-system.py runs against the
+# mounted trees. The same validator gates every qualification build; this
+# command re-checks an already-built artifact (for example the images inside a
+# published OS package, or a checkpoint object).
+#
+# Usage:
+#   bin/omarchy-iso-verify-installed-config <root.img> <boot.img> [evidence.json]
+#
+# Exit status: 0 when every check passes, 1 when any check fails.
+
+set -euo pipefail
+
+ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+
+if (( $# < 2 || $# > 3 )); then
+  echo "Usage: omarchy-iso-verify-installed-config <root.img> <boot.img> [evidence.json]" >&2
+  exit 64
+fi
+
+root_image=$(cd -- "$(dirname -- "$1")" && pwd)/$(basename -- "$1")
+boot_image=$(cd -- "$(dirname -- "$2")" && pwd)/$(basename -- "$2")
+evidence=${3:-}
+
+[[ -f $root_image ]] || { echo "ERROR: root image not found: $root_image" >&2; exit 66; }
+[[ -f $boot_image ]] || { echo "ERROR: boot image not found: $boot_image" >&2; exit 66; }
+
+toolchain=$(docker images 'omarchy/asahi-toolchain' \
+  --format '{{.Repository}}:{{.Tag}}' | head -1)
+if [[ -z $toolchain ]]; then
+  echo "ERROR: no omarchy/asahi-toolchain image is available." >&2
+  echo "Run a package build first (bin/omarchy-iso-make --target aarch64/apple-silicon --artifact asahi-os-package)." >&2
+  exit 69
+fi
+
+output=$(mktemp)
+trap 'rm -f "$output"' EXIT
+
+set +e
+docker run --rm --privileged --platform linux/arm64 \
+  -v "$root_image":/img/root.img:ro \
+  -v "$boot_image":/img/boot.img:ro \
+  -v "$ROOT/builder":/builder:ro \
+  "$toolchain" bash -c '
+set -euo pipefail
+root_loop=$(losetup -r --find --show /img/root.img)
+boot_loop=$(losetup -r --find --show /img/boot.img)
+mkdir -p /mnt/verify-root /mnt/verify-boot
+cleanup() {
+  umount /mnt/verify-root 2>/dev/null || true
+  umount /mnt/verify-boot 2>/dev/null || true
+  losetup -d "$root_loop" 2>/dev/null || true
+  losetup -d "$boot_loop" 2>/dev/null || true
+}
+trap cleanup EXIT
+mount -o ro,subvol=@ "$root_loop" /mnt/verify-root
+mount -o ro "$boot_loop" /mnt/verify-boot
+python3 /builder/verify-asahi-installed-system.py \
+  --root-tree /mnt/verify-root --boot-tree /mnt/verify-boot
+' >"$output"
+status=$?
+set -e
+
+if [[ -n $evidence ]]; then
+  cp "$output" "$evidence"
+fi
+cat "$output"
+exit "$status"

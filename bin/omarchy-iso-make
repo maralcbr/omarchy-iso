@@ -2,6 +2,19 @@
 
 set -e
 
+if (( ${BASH_VERSINFO[0]:-0} < 5 )); then
+  for bash5 in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    if [[ -x $bash5 ]]; then
+      exec "$bash5" "${BASH_SOURCE[0]}" "$@"
+    fi
+  done
+  echo "omarchy-iso-make requires Bash 5+ (install Homebrew bash)." >&2
+  exit 1
+fi
+
+ORIGINAL_ARGUMENTS=("$@")
+BUILD_ROOT=$(realpath "${BASH_SOURCE[0]%/*}/..")
+
 NO_CACHE=""
 KEEP_PKG_CACHE=""
 LOCAL_OMARCHY_PATH=""
@@ -9,7 +22,12 @@ LOCAL_PKGS_PATH=""
 OMARCHY_ARCH="x86_64"
 OMARCHY_ARCH_EXPLICIT=0
 OMARCHY_MEDIA_TARGET=""
+OMARCHY_ARTIFACT_KIND="iso"
 OMARCHY_APPLE_MEDIA_BUILD_PROBE=0
+OMARCHY_BUILD_MODE="qualification"
+OMARCHY_CHECKPOINT_POLICY=""
+OMARCHY_ASAHI_REQUIRE_CACHE_HIT_THROUGH=""
+
 while [[ $# -gt 0 ]]; do
   case $1 in
   --arch)
@@ -28,6 +46,38 @@ while [[ $# -gt 0 ]]; do
     ;;
   --target=*)
     OMARCHY_MEDIA_TARGET="${1#*=}"
+    shift
+    ;;
+  --artifact)
+    OMARCHY_ARTIFACT_KIND="${2:-}"
+    shift 2
+    ;;
+  --artifact=*)
+    OMARCHY_ARTIFACT_KIND="${1#*=}"
+    shift
+    ;;
+  --mode)
+    OMARCHY_BUILD_MODE="${2:-}"
+    shift 2
+    ;;
+  --mode=*)
+    OMARCHY_BUILD_MODE="${1#*=}"
+    shift
+    ;;
+  --checkpoint-policy)
+    OMARCHY_CHECKPOINT_POLICY="${2:-}"
+    shift 2
+    ;;
+  --checkpoint-policy=*)
+    OMARCHY_CHECKPOINT_POLICY="${1#*=}"
+    shift
+    ;;
+  --require-cache-hit-through)
+    OMARCHY_ASAHI_REQUIRE_CACHE_HIT_THROUGH="${2:-}"
+    shift 2
+    ;;
+  --require-cache-hit-through=*)
+    OMARCHY_ASAHI_REQUIRE_CACHE_HIT_THROUGH="${1#*=}"
     shift
     ;;
   --no-cache)
@@ -83,12 +133,33 @@ while [[ $# -gt 0 ]]; do
     ;;
   *)
     echo "Unknown option: $1"
-    echo "Usage: $0 [--arch x86_64|aarch64] [--target x86_64/pc|aarch64/generic|aarch64/apple-silicon] [--apple-media-validation-build] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>]"
+    echo "Usage: $0 [--arch x86_64|aarch64] [--target x86_64/pc|aarch64/generic|aarch64/apple-silicon] [--artifact iso|asahi-os-package] [--mode qualification|diagnostic] [--checkpoint-policy read-write|write-only] [--require-cache-hit-through configured-target] [--apple-media-validation-build] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>]"
     exit 1
     ;;
   esac
 done
 
+case "$OMARCHY_BUILD_MODE" in
+  qualification|diagnostic) ;;
+  *)
+    echo "Unsupported build mode: $OMARCHY_BUILD_MODE" >&2
+    exit 1
+    ;;
+esac
+case "${OMARCHY_CHECKPOINT_POLICY:-}" in
+  ""|read-write|write-only) ;;
+  *)
+    echo "Unsupported checkpoint policy: $OMARCHY_CHECKPOINT_POLICY" >&2
+    exit 1
+    ;;
+esac
+case "$OMARCHY_ASAHI_REQUIRE_CACHE_HIT_THROUGH" in
+  ""|configured-target) ;;
+  *)
+    echo "Unsupported cache-hit requirement: $OMARCHY_ASAHI_REQUIRE_CACHE_HIT_THROUGH" >&2
+    exit 1
+    ;;
+esac
 case "$OMARCHY_ARCH" in
   x86_64|aarch64) ;;
   *)
@@ -118,21 +189,123 @@ if (( OMARCHY_APPLE_MEDIA_BUILD_PROBE )) && [[ $OMARCHY_MEDIA_TARGET != "aarch64
   exit 1
 fi
 
-if [[ -n ${SOURCE_DATE_EPOCH:-} && ! $SOURCE_DATE_EPOCH =~ ^[0-9]+$ ]]; then
+case "$OMARCHY_ARTIFACT_KIND" in
+  iso|asahi-os-package) ;;
+  *)
+    echo "Unsupported artifact kind: $OMARCHY_ARTIFACT_KIND" >&2
+    exit 1
+    ;;
+esac
+if [[ $OMARCHY_ARTIFACT_KIND == "asahi-os-package" && $OMARCHY_MEDIA_TARGET != "aarch64/apple-silicon" ]]; then
+  echo "asahi-os-package requires --target aarch64/apple-silicon" >&2
+  exit 1
+fi
+if (( OMARCHY_APPLE_MEDIA_BUILD_PROBE )) && [[ $OMARCHY_ARTIFACT_KIND != "iso" ]]; then
+  echo "--apple-media-validation-build applies only to the iso artifact" >&2
+  exit 1
+fi
+
+asahi_full_os_package=0
+if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon &&
+  $OMARCHY_ARTIFACT_KIND == asahi-os-package ]]; then
+  asahi_full_os_package=1
+fi
+if [[ -z $OMARCHY_CHECKPOINT_POLICY ]]; then
+  if (( asahi_full_os_package )) && [[ $OMARCHY_BUILD_MODE == qualification ]]; then
+    # No signed qualification receipt authority exists yet. Keep production
+    # runnable by creating fresh checkpoints without reading old content.
+    OMARCHY_CHECKPOINT_POLICY=write-only
+  else
+    OMARCHY_CHECKPOINT_POLICY=read-write
+  fi
+fi
+if [[ $OMARCHY_BUILD_MODE == diagnostic ]] && (( ! asahi_full_os_package )); then
+  echo "Diagnostic mode is supported only for the Apple Silicon full-OS package." >&2
+  exit 1
+fi
+if [[ -n $OMARCHY_ASAHI_REQUIRE_CACHE_HIT_THROUGH ]] &&
+  (( ! asahi_full_os_package )); then
+  echo "Cache-hit requirements are supported only for the Apple Silicon full-OS package." >&2
+  exit 1
+fi
+if (( asahi_full_os_package )) &&
+  [[ $OMARCHY_BUILD_MODE == qualification &&
+    $OMARCHY_CHECKPOINT_POLICY == read-write ]]; then
+  echo "Qualification checkpoint reuse requires signed admission authority" >&2
+  exit 1
+fi
+if (( asahi_full_os_package )) &&
+  [[ $OMARCHY_CHECKPOINT_POLICY == write-only &&
+    -n $OMARCHY_ASAHI_REQUIRE_CACHE_HIT_THROUGH ]]; then
+  echo "Write-only qualification cannot satisfy a required cache hit" >&2
+  exit 1
+fi
+
+if (( asahi_full_os_package )) && [[ $OMARCHY_BUILD_MODE == qualification && \
+  ! ${SOURCE_DATE_EPOCH:-} =~ ^[0-9]+$ ]]; then
+  echo "Apple qualification requires a nonnegative SOURCE_DATE_EPOCH" >&2
+  exit 1
+elif [[ -n ${SOURCE_DATE_EPOCH:-} && ! $SOURCE_DATE_EPOCH =~ ^[0-9]+$ ]]; then
   echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2
   exit 1
+fi
+
+OMARCHY_BUILD_JOBS=${OMARCHY_BUILD_JOBS:-10}
+CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-$OMARCHY_BUILD_JOBS}
+for build_jobs in "$OMARCHY_BUILD_JOBS" "$CARGO_BUILD_JOBS"; do
+  if [[ ! $build_jobs =~ ^[1-9][0-9]*$ ]]; then
+    echo "Build concurrency must be a positive integer: $build_jobs" >&2
+    exit 1
+  fi
+done
+OMARCHY_BUILD_RUN_ID=${OMARCHY_BUILD_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$}
+if [[ ! $OMARCHY_BUILD_RUN_ID =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+  echo "Unsafe build run ID: $OMARCHY_BUILD_RUN_ID" >&2
+  exit 1
+fi
+export OMARCHY_BUILD_RUN_ID
+
+# One owner-checked lease serializes every shared cache, repository, builder,
+# Docker, evidence, and publication operation for a full Apple qualification.
+# The child must prove the exact locked descriptor inherited from the lease
+# wrapper; environment markers alone are never an admission override.
+ASAHI_CACHE_BASE=""
+if (( asahi_full_os_package )); then
+  ASAHI_CACHE_BASE=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy
+  if [[ ! ${OMARCHY_ASAHI_LIFECYCLE_LEASE_FD:-} =~ ^[3-9][0-9]*$ ]]; then
+    exec python3 "$BUILD_ROOT/builder/asahi-lifecycle-lease.py" run \
+      --create-lease-root \
+      --lease-root "$ASAHI_CACHE_BASE" \
+      --allowed-owner 0 \
+      --allowed-owner "$(id -u)" \
+      -- "$BASH" "$BUILD_ROOT/bin/omarchy-iso-make" \
+      "${ORIGINAL_ARGUMENTS[@]}"
+  fi
+  [[ ${OMARCHY_ASAHI_LIFECYCLE_LEASE_ROOT:-} == "$ASAHI_CACHE_BASE" ]] || {
+    echo "Inherited Apple lifecycle lease root does not match the cache root" >&2
+    exit 1
+  }
+  python3 "$BUILD_ROOT/builder/asahi-lifecycle-lease.py" validate-held \
+    --lease-root "$ASAHI_CACHE_BASE" \
+    --lease-fd "$OMARCHY_ASAHI_LIFECYCLE_LEASE_FD" \
+    --allowed-owner 0 \
+    --allowed-owner "$(id -u)"
 fi
 
 case "$OMARCHY_MEDIA_TARGET" in
   x86_64/pc|aarch64/generic) ;;
   aarch64/apple-silicon)
-    if (( ! OMARCHY_APPLE_MEDIA_BUILD_PROBE )); then
+    if [[ $OMARCHY_ARTIFACT_KIND == "asahi-os-package" ]]; then
+      echo "Building a private full-OS Asahi package; release use requires signed catalog admission and physical qualification." >&2
+    elif (( ! OMARCHY_APPLE_MEDIA_BUILD_PROBE )); then
       echo "The aarch64/apple-silicon media target is defined but not buildable yet." >&2
       echo "The pinned Asahi live profile exists, but disposable ISO build/boot and BOOTAA64.EFI compatibility evidence are still missing." >&2
       echo "Refusing to substitute the generic aarch64 media target." >&2
       exit 1
     fi
-    echo "Building an unverified Apple media validation artifact; release use is forbidden." >&2
+    if [[ $OMARCHY_ARTIFACT_KIND == "iso" ]]; then
+      echo "Building an unverified Apple media validation artifact; release use is forbidden." >&2
+    fi
     ;;
   *)
     echo "Unsupported media target: $OMARCHY_MEDIA_TARGET" >&2
@@ -175,7 +348,9 @@ lint_file_permissions() {
 
   while IFS= read -r path; do
     [[ -n $path ]] && declared["$path"]=1
-  done < <(grep -oP '^\s*\["\K[^"]+(?="\])' "$profiledef" || true)
+  done < <(
+    sed -nE 's/^[[:space:]]*\["([^"]+)"\]=.*/\1/p' "$profiledef"
+  )
 
   while IFS= read -r f; do
     [[ -f $f ]] || continue
@@ -205,17 +380,356 @@ lint_file_permissions
 
 # Purging the host package cache needs interactive sudo; --keep-pkg-cache
 # skips it so unattended builds (test rigs, agents) can run without a prompt.
-if [[ -z $KEEP_PKG_CACHE ]]; then
+if [[ -z $KEEP_PKG_CACHE && $OMARCHY_MEDIA_TARGET != aarch64/apple-silicon ]]; then
   sudo rm -rf /var/cache/pacman/pkg/*
 fi
-git submodule update --init --recursive --jobs=8
+git submodule update --init --recursive --jobs="$OMARCHY_BUILD_JOBS"
 OMARCHY_ISO_SOURCE_COMMIT=$(git rev-parse HEAD)
 OMARCHY_ARCHISO_SOURCE_COMMIT=$(git -C archiso rev-parse HEAD)
 
 BUILD_SCRIPT="builder/build-iso.sh"
-BUILD_ROOT=$(realpath "${BASH_SOURCE[0]%/*}/..")
-BUILD_RELEASE_PATH="$BUILD_ROOT/release"
-mkdir -p "$BUILD_RELEASE_PATH"
+# shellcheck source=../builder/sha256-adapter.sh
+source "$BUILD_ROOT/builder/sha256-adapter.sh"
+# Overridable so tests and sandboxed runs never share the real release root.
+BUILD_RELEASE_PATH="${OMARCHY_BUILD_RELEASE_ROOT:-$BUILD_ROOT/release}"
+if (( asahi_full_os_package )); then
+  python3 "$BUILD_ROOT/builder/asahi-lifecycle-lease.py" ensure-directory \
+    --path "$BUILD_RELEASE_PATH" \
+    --allowed-owner 0 \
+    --allowed-owner "$(id -u)"
+else
+  mkdir -p "$BUILD_RELEASE_PATH"
+fi
+HOST_RUN_EVIDENCE=$BUILD_RELEASE_PATH/build-evidence/$OMARCHY_BUILD_RUN_ID
+if [[ -e $HOST_RUN_EVIDENCE || -L $HOST_RUN_EVIDENCE ]]; then
+  echo "Refusing to reuse existing build run evidence: $HOST_RUN_EVIDENCE" >&2
+  exit 1
+fi
+
+ASAHI_STAGE_INPUT_ROOT=""
+HOST_BUILD_STATE=""
+BUILD_INPUT_ROOT=$BUILD_ROOT
+if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon &&
+  $OMARCHY_ARTIFACT_KIND == asahi-os-package ]]; then
+  # Prefer the private per-user temporary root: the pinned Node cache
+  # validator rejects group/world-writable ancestors, which /private/tmp
+  # always has, and rejects symlinked ancestors, which the unresolved
+  # TMPDIR spelling has on macOS (/var is a symlink). Resolve it first.
+  # /private/tmp remains the fallback when TMPDIR is unset.
+  HOST_BUILD_STATE=$(mktemp -d "$(realpath "${TMPDIR:-/private/tmp}")/omarchy-asahi-host-build.XXXXXX")
+  cleanup_asahi_host_build() {
+    if [[ -n ${HOST_BUILD_STATE:-} && -d $HOST_BUILD_STATE ]]; then
+      chmod -R u+w "$HOST_BUILD_STATE" 2>/dev/null || true
+      rm -rf -- "$HOST_BUILD_STATE"
+    fi
+  }
+  trap cleanup_asahi_host_build EXIT
+  ASAHI_STAGE_INPUT_ROOT=$HOST_BUILD_STATE/stage-inputs
+  python3 "$BUILD_ROOT/builder/asahi_stage_inputs.py" generate \
+    --repo-root "$BUILD_ROOT" \
+    --spec "$BUILD_ROOT/builder/asahi-stage-inputs.json" \
+    --build-lock "$BUILD_ROOT/builder/asahi-build-lock.json" \
+    --mode "$OMARCHY_BUILD_MODE" \
+    --output-root "$ASAHI_STAGE_INPUT_ROOT"
+  OMARCHY_ISO_SOURCE_IDENTITY=$(sha256_file \
+    "$ASAHI_STAGE_INPUT_ROOT/index.json")
+
+  # Freeze every repository tree mounted into the privileged builder, then
+  # prove the generated producer and admission indexes against that immutable
+  # snapshot. This closes the host-edit window between identity generation and
+  # checkpoint store/restore.
+  BUILD_INPUT_ROOT=$HOST_BUILD_STATE/current-source
+  mkdir "$BUILD_INPUT_ROOT"
+  for source_directory in archiso bin builder configs; do
+    cp -a "$BUILD_ROOT/$source_directory" "$BUILD_INPUT_ROOT/$source_directory"
+  done
+  git_common_directory=$(git -C "$BUILD_ROOT" rev-parse \
+    --path-format=absolute --git-common-dir)
+  git_worktree_directory=$(git -C "$BUILD_ROOT" rev-parse \
+    --path-format=absolute --git-dir)
+  if [[ ! -d $git_common_directory || -L $git_common_directory ||
+    ! -d $git_worktree_directory || -L $git_worktree_directory ]]; then
+    echo "Apple source provenance Git metadata is missing or unsafe" >&2
+    exit 1
+  fi
+  cp -a "$git_common_directory" "$BUILD_INPUT_ROOT/.git"
+  for worktree_metadata in HEAD index; do
+    metadata_path=$git_worktree_directory/$worktree_metadata
+    if [[ ! -f $metadata_path || -L $metadata_path ]]; then
+      echo "Apple source provenance is missing $worktree_metadata" >&2
+      exit 1
+    fi
+    cp -a "$metadata_path" "$BUILD_INPUT_ROOT/.git/$worktree_metadata"
+  done
+  if find "$BUILD_INPUT_ROOT/.git" -type l -print -quit | grep -q .; then
+    echo "Apple source provenance Git snapshot contains a symlink" >&2
+    exit 1
+  fi
+  # Python bytecode is generated, mutable execution state rather than a source
+  # input. Never let an adjacent cached module enter the immutable producer
+  # snapshot or override the source file whose digest was declared.
+  find "$BUILD_INPUT_ROOT" -type d -name __pycache__ -prune \
+    -exec rm -rf -- {} +
+  find "$BUILD_INPUT_ROOT" -type f \
+    \( -name '*.pyc' -o -name '*.pyo' \) -delete
+  if find "$BUILD_INPUT_ROOT" \
+    \( -type d -name __pycache__ -o -type f \
+      \( -name '*.pyc' -o -name '*.pyo' \) \) \
+    -print -quit | grep -q .; then
+    echo "Immutable Apple build snapshot retained Python bytecode" >&2
+    exit 1
+  fi
+  chmod -R a-w "$BUILD_INPUT_ROOT"
+  ASAHI_STAGE_ADMISSION_RECEIPT=$HOST_BUILD_STATE/stage-admission-receipt.json
+  GIT_OPTIONAL_LOCKS=0 PYTHONDONTWRITEBYTECODE=1 python3 - \
+    "$BUILD_INPUT_ROOT" \
+    "$ASAHI_STAGE_INPUT_ROOT" \
+    "$OMARCHY_BUILD_MODE" \
+    "$ASAHI_STAGE_ADMISSION_RECEIPT" <<'PYTHON'
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+import types
+
+snapshot = Path(sys.argv[1])
+stage_input_root = Path(sys.argv[2])
+mode = sys.argv[3]
+receipt_path = Path(sys.argv[4])
+stage_inputs_path = snapshot / "builder/asahi_stage_inputs.py"
+stage_inputs = types.ModuleType("asahi_stage_inputs_current_source")
+stage_inputs.__file__ = str(stage_inputs_path)
+stage_inputs.__package__ = ""
+exec(
+    compile(stage_inputs_path.read_bytes(), str(stage_inputs_path), "exec"),
+    stage_inputs.__dict__,
+)
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def canonical(value: object) -> bytes:
+    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+
+
+specification = stage_inputs.load_specification(
+    snapshot / "builder/asahi-stage-inputs.json"
+)
+build_lock = json.loads((snapshot / "builder/asahi-build-lock.json").read_text())
+producer_materials = stage_inputs._producer_stage_materials(
+    repository=snapshot,
+    specification=specification,
+    build_lock=build_lock,
+    mode=mode,
+)
+producer_identities = {
+    stage: material["producer_binding_identity"]
+    for stage, material in producer_materials.items()
+}
+index_path = stage_input_root / "index.json"
+admission_index_path = stage_input_root / "admission-index.json"
+index = json.loads(index_path.read_text())
+admission_index = json.loads(admission_index_path.read_text())
+stage_order = specification["stage_order"]
+if (
+    index.get("schema_version") != stage_inputs.SCHEMA_VERSION
+    or admission_index.get("schema_version") != stage_inputs.SCHEMA_VERSION
+    or index.get("mode") != mode
+    or admission_index.get("mode") != mode
+    or set(index.get("stages", {})) != set(stage_order)
+    or set(admission_index.get("stages", {})) != set(stage_order)
+):
+    raise SystemExit("generated stage indexes are stale or incomplete")
+
+receipt_stages = {}
+admission_identities = {}
+for stage in stage_order:
+    declaration = specification["stages"][stage]
+    effective_mode = "shared" if stage == "builder-toolchain" else mode
+    stage_root = stage_input_root / stage
+    source_lock_path = stage_root / "source-lock.json"
+    source_manifest_path = stage_root / "source-manifest.json"
+    admission_policy_path = stage_root / "admission-policy.json"
+    source_lock = json.loads(source_lock_path.read_text())
+    source_manifest = json.loads(source_manifest_path.read_text())
+    admission_policy = json.loads(admission_policy_path.read_text())
+    expected_source_manifest = producer_materials[stage]["source_manifest"]
+    expected_admission_policy = stage_inputs.build_stage_admission_manifest(
+        repository=snapshot,
+        stage=stage,
+        mode=effective_mode,
+        paths=stage_inputs._admission_paths(specification, stage),
+        declaration=declaration,
+        dependency_policy_identities={
+            dependency: admission_identities[dependency]
+            for dependency in declaration["depends_on"]
+        },
+    )
+    admission_identities[stage] = expected_admission_policy[
+        "admission_policy_identity"
+    ]
+    expected_lock = stage_inputs.build_lock_projection(
+        build_lock, stage, declaration, effective_mode
+    )
+    source_lock_sha256 = digest(source_lock_path)
+    producer_record = index["stages"][stage]
+    admission_record = admission_index["stages"][stage]
+    if source_lock != expected_lock:
+        raise SystemExit(f"generated source lock is stale: {stage}")
+    if source_manifest != expected_source_manifest:
+        raise SystemExit(f"generated source manifest is stale: {stage}")
+    if admission_policy != expected_admission_policy:
+        raise SystemExit(f"generated admission policy is stale: {stage}")
+    if (
+        producer_record.get("producer_binding_identity")
+        != producer_identities[stage]
+        or producer_record.get("producer_binding_mode") != effective_mode
+        or producer_record.get("source_identity")
+        != source_manifest.get("source_identity")
+        or producer_record.get("source_lock_sha256") != source_lock_sha256
+        or source_manifest.get("stage") != stage
+        or source_manifest.get("producer_binding_identity")
+        != producer_identities[stage]
+        or source_manifest.get("producer_binding_mode") != effective_mode
+    ):
+        raise SystemExit(f"generated producer binding is stale: {stage}")
+    if (
+        admission_record.get("admission_policy_identity")
+        != admission_identities[stage]
+        or admission_record.get("admission_policy_mode") != effective_mode
+        or admission_policy.get("stage") != stage
+        or admission_policy.get("mode") != effective_mode
+        or admission_policy.get("admission_policy_identity")
+        != admission_identities[stage]
+    ):
+        raise SystemExit(f"generated admission policy is stale: {stage}")
+    receipt_stages[stage] = {
+        "admission_policy_identity": admission_identities[stage],
+        "admission_policy_mode": effective_mode,
+        "admission_policy_sha256": digest(admission_policy_path),
+        "producer_binding_identity": producer_identities[stage],
+        "producer_binding_mode": effective_mode,
+        "source_identity": source_manifest["source_identity"],
+        "source_lock_sha256": source_lock_sha256,
+        "source_manifest_sha256": digest(source_manifest_path),
+    }
+
+receipt = {
+    "schema_version": 1,
+    "verification_kind": "asahi-current-source-admission-receipt",
+    "authorization_scope": (
+        "diagnostic-checkpoint-reuse"
+        if mode == "diagnostic"
+        else "qualification-metadata-only"
+    ),
+    "mode": mode,
+    "source_snapshot": {
+        "kind": "immutable-host-snapshot",
+        "paths": [".git", "archiso", "bin", "builder", "configs"],
+    },
+    "stage_input_index_sha256": digest(index_path),
+    "admission_index_sha256": digest(admission_index_path),
+    "stages": receipt_stages,
+}
+receipt_path.write_bytes(canonical(receipt))
+os.chmod(receipt_path, 0o444)
+PYTHON
+
+  OMARCHY_ASAHI_CHECKPOINT_ROOT=${OMARCHY_ASAHI_CHECKPOINT_ROOT:-$ASAHI_CACHE_BASE/asahi-checkpoints}
+  OMARCHY_ASAHI_NODE_CACHE=${OMARCHY_ASAHI_NODE_CACHE:-$ASAHI_CACHE_BASE/asahi-node}
+  for persistent_directory in \
+    "$OMARCHY_ASAHI_CHECKPOINT_ROOT" "$OMARCHY_ASAHI_NODE_CACHE"; do
+    python3 "$BUILD_INPUT_ROOT/builder/asahi-lifecycle-lease.py" \
+      ensure-directory \
+      --path "$persistent_directory" \
+      --allowed-owner 0 \
+      --allowed-owner "$(id -u)"
+  done
+  python3 "$BUILD_INPUT_ROOT/builder/pinned-node-cache.py" \
+    validate-cache-root \
+    --cache-root "$OMARCHY_ASAHI_NODE_CACHE" \
+    --allowed-owner 0 \
+    --allowed-owner "$(id -u)"
+
+  # Docker receives only a private, immutable snapshot of the exact lock-bound
+  # Node payload. The shared pathname is never reused as the later mount source.
+  HOST_NODE_CACHE_VIEW=$HOST_BUILD_STATE/node-cache
+  mkdir -m 0700 "$HOST_NODE_CACHE_VIEW"
+  NODE_FILENAME=$(jq -er '.node.filename' \
+    "$BUILD_INPUT_ROOT/builder/asahi-build-lock.json")
+  NODE_DIST_URL=$(jq -er '.node.url' \
+    "$BUILD_INPUT_ROOT/builder/asahi-build-lock.json")
+  NODE_SIZE=$(jq -er '.node.size_bytes' \
+    "$BUILD_INPUT_ROOT/builder/asahi-build-lock.json")
+  NODE_SHA=$(jq -er '.node.sha256' \
+    "$BUILD_INPUT_ROOT/builder/asahi-build-lock.json")
+  [[ $NODE_FILENAME == "${NODE_FILENAME##*/}" && \
+    $NODE_FILENAME =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || {
+    echo "Unsafe pinned Node filename: $NODE_FILENAME" >&2
+    exit 1
+  }
+  node_snapshot_status=0
+  python3 "$BUILD_INPUT_ROOT/builder/pinned-node-cache.py" snapshot \
+    --cache-root "$OMARCHY_ASAHI_NODE_CACHE" \
+    --filename "$NODE_FILENAME" \
+    --destination-root "$HOST_NODE_CACHE_VIEW" \
+    --sha256 "$NODE_SHA" \
+    --size "$NODE_SIZE" \
+    --allowed-owner 0 \
+    --allowed-owner "$(id -u)" || node_snapshot_status=$?
+  if (( node_snapshot_status == 3 )); then
+    HOST_NODE_DOWNLOAD=$HOST_BUILD_STATE/node-download
+    mkdir -m 0700 "$HOST_NODE_DOWNLOAD"
+    curl -fsSL "$NODE_DIST_URL" -o "$HOST_NODE_DOWNLOAD/$NODE_FILENAME"
+    chmod 0444 "$HOST_NODE_DOWNLOAD/$NODE_FILENAME"
+    python3 "$BUILD_INPUT_ROOT/builder/pinned-node-cache.py" publish \
+      --source "$HOST_NODE_DOWNLOAD/$NODE_FILENAME" \
+      --cache-root "$OMARCHY_ASAHI_NODE_CACHE" \
+      --filename "$NODE_FILENAME" \
+      --sha256 "$NODE_SHA" \
+      --size "$NODE_SIZE" \
+      --allowed-owner 0 \
+      --allowed-owner "$(id -u)"
+    python3 "$BUILD_INPUT_ROOT/builder/pinned-node-cache.py" snapshot \
+      --cache-root "$OMARCHY_ASAHI_NODE_CACHE" \
+      --filename "$NODE_FILENAME" \
+      --destination-root "$HOST_NODE_CACHE_VIEW" \
+      --sha256 "$NODE_SHA" \
+      --size "$NODE_SIZE" \
+      --allowed-owner 0 \
+      --allowed-owner "$(id -u)"
+  elif (( node_snapshot_status != 0 )); then
+    echo "Pinned Node cache snapshot failed: $node_snapshot_status" >&2
+    exit 1
+  fi
+
+  TOOLCHAIN_RUN_MANIFEST=$HOST_BUILD_STATE/builder-toolchain.json
+  TOOLCHAIN_IDENTITY_MANIFEST=$HOST_BUILD_STATE/builder-toolchain-identity.json
+  BUILD_IMAGE=$( \
+    GIT_OPTIONAL_LOCKS=0 \
+    OMARCHY_BUILD_MODE="$OMARCHY_BUILD_MODE" \
+    OMARCHY_ASAHI_CHECKPOINT_ROOT="$OMARCHY_ASAHI_CHECKPOINT_ROOT" \
+    OMARCHY_ASAHI_TOOLCHAIN_RUN_MANIFEST="$TOOLCHAIN_RUN_MANIFEST" \
+    OMARCHY_ASAHI_TOOLCHAIN_LOCK="$ASAHI_STAGE_INPUT_ROOT/builder-toolchain/source-lock.json" \
+    OMARCHY_ASAHI_TOOLCHAIN_SOURCE_MANIFEST="$ASAHI_STAGE_INPUT_ROOT/builder-toolchain/source-manifest.json" \
+      bash "$BUILD_INPUT_ROOT/builder/ensure-asahi-toolchain-image.sh" \
+  )
+  # The schema-2 run manifest is validated, projected to the schema-1 identity
+  # shape, and gated by the canonical implementation. Those projected bytes feed
+  # the verified-package-cache checkpoint identity, so they are byte-stable
+  # against the jq program this replaced -- see
+  # test/unit/test_asahi_toolchain_projection_golden.py.
+  python3 "$BUILD_INPUT_ROOT/builder/asahi_toolchain_metadata.py" project \
+    --run-manifest "$TOOLCHAIN_RUN_MANIFEST" \
+    --legacy-lock "$BUILD_INPUT_ROOT/builder/asahi-build-lock.json" \
+    --output "$TOOLCHAIN_IDENTITY_MANIFEST" || {
+    echo "Invalid stable builder toolchain identity manifest" >&2
+    exit 1
+  }
+fi
 
 OMARCHY_ISO_REF="${OMARCHY_ISO_REF:-quattro}"
 OMARCHY_MIRROR="${OMARCHY_MIRROR:-stable}"
@@ -235,19 +749,81 @@ DOCKER_ARGS=(
   -e "OMARCHY_MIRROR=$OMARCHY_MIRROR"
   -e "OMARCHY_ARCH=$OMARCHY_ARCH"
   -e "OMARCHY_MEDIA_TARGET=$OMARCHY_MEDIA_TARGET"
+  -e "OMARCHY_ARTIFACT_KIND=$OMARCHY_ARTIFACT_KIND"
+  -e "OMARCHY_ASAHI_PRODUCT=/builder/products/omarchy-mx-mac.json"
   -e "OMARCHY_APPLE_MEDIA_BUILD_PROBE=$OMARCHY_APPLE_MEDIA_BUILD_PROBE"
   -e "OMARCHY_BUILD_IMAGE=$BUILD_IMAGE"
   -e "OMARCHY_ISO_SOURCE_COMMIT=$OMARCHY_ISO_SOURCE_COMMIT"
   -e "OMARCHY_ARCHISO_SOURCE_COMMIT=$OMARCHY_ARCHISO_SOURCE_COMMIT"
+  -e "OMARCHY_ISO_SOURCE_IDENTITY=${OMARCHY_ISO_SOURCE_IDENTITY:-$OMARCHY_ISO_SOURCE_COMMIT}"
   -e "OMARCHY_INSTALL_DEBUG=${OMARCHY_INSTALL_DEBUG:-}"
+  -e "OMARCHY_BUILD_JOBS=$OMARCHY_BUILD_JOBS"
+  -e "CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS"
+  -e "OMARCHY_BUILD_MODE=$OMARCHY_BUILD_MODE"
+  -e "OMARCHY_CHECKPOINT_POLICY=$OMARCHY_CHECKPOINT_POLICY"
+  -e "OMARCHY_ASAHI_REQUIRE_CACHE_HIT_THROUGH=$OMARCHY_ASAHI_REQUIRE_CACHE_HIT_THROUGH"
+  -e "OMARCHY_CHECKPOINT_ADMISSION_STAGE=${OMARCHY_CHECKPOINT_ADMISSION_STAGE:-}"
+  -e "OMARCHY_BUILD_RUN_ID=$OMARCHY_BUILD_RUN_ID"
   -e "HOST_UID=$(id -u)"
   -e "HOST_GID=$(id -g)"
   -v "$BUILD_RELEASE_PATH/:/out/"
-  -v "$BUILD_ROOT/$BUILD_SCRIPT:/$BUILD_SCRIPT:ro"
-  -v "$BUILD_ROOT/archiso:/archiso:ro"
-  -v "$BUILD_ROOT/builder:/builder:ro"
-  -v "$BUILD_ROOT/configs:/configs:ro"
+  -v "$BUILD_INPUT_ROOT/$BUILD_SCRIPT:/$BUILD_SCRIPT:ro"
+  -v "$BUILD_INPUT_ROOT/archiso:/archiso:ro"
+  -v "$BUILD_INPUT_ROOT/builder:/builder:ro"
+  -v "$BUILD_INPUT_ROOT/configs:/configs:ro"
 )
+
+if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon &&
+  $OMARCHY_ARTIFACT_KIND == asahi-os-package ]]; then
+  DOCKER_ARGS+=(
+    -e "OMARCHY_ASAHI_TOOLCHAIN_PREPARED=1"
+    -e "OMARCHY_ASAHI_CHECKPOINT_ROOT=/var/cache/omarchy/asahi-checkpoints"
+    -e "OMARCHY_ASAHI_STAGE_INPUT_ROOT=/omarchy-asahi-stage-inputs"
+    -e "OMARCHY_ASAHI_TOOLCHAIN_RUN_MANIFEST=/omarchy-builder-toolchain-run.json"
+    -e "OMARCHY_ASAHI_TOOLCHAIN_IDENTITY_MANIFEST=/omarchy-builder-toolchain-identity.json"
+    -v "$OMARCHY_ASAHI_CHECKPOINT_ROOT:/var/cache/omarchy/asahi-checkpoints"
+    -v "$HOST_NODE_CACHE_VIEW:/var/cache/omarchy/node:ro"
+    -v "$ASAHI_STAGE_INPUT_ROOT:/omarchy-asahi-stage-inputs:ro"
+    -v "$ASAHI_STAGE_ADMISSION_RECEIPT:/omarchy-asahi-stage-admission-receipt.json:ro"
+    -v "$TOOLCHAIN_RUN_MANIFEST:/omarchy-builder-toolchain-run.json:ro"
+    -v "$TOOLCHAIN_IDENTITY_MANIFEST:/omarchy-builder-toolchain-identity.json:ro"
+  )
+  if [[ -n ${OMARCHY_ASAHI_REKEY_PLAN_ROOT:-} ]]; then
+    HOST_REKEY_PLAN_ROOT=$(realpath -- "$OMARCHY_ASAHI_REKEY_PLAN_ROOT")
+    if [[ ! -d $HOST_REKEY_PLAN_ROOT || -L $HOST_REKEY_PLAN_ROOT ]]; then
+      echo "Unsafe Apple checkpoint rekey plan root: $HOST_REKEY_PLAN_ROOT" >&2
+      exit 1
+    fi
+    DOCKER_ARGS+=(
+      -e "OMARCHY_ASAHI_REKEY_PLAN_ROOT=/omarchy-asahi-rekey-plans"
+      -v "$HOST_REKEY_PLAN_ROOT:/omarchy-asahi-rekey-plans:ro"
+    )
+  fi
+  if [[ -n ${OMARCHY_ASAHI_UEFI_PAYLOAD:-} ]]; then
+    HOST_ASAHI_UEFI_PAYLOAD=$(realpath -- "$OMARCHY_ASAHI_UEFI_PAYLOAD")
+    if [[ ! -f $HOST_ASAHI_UEFI_PAYLOAD || -L $HOST_ASAHI_UEFI_PAYLOAD ]]; then
+      echo "Unsafe Apple UEFI payload: $HOST_ASAHI_UEFI_PAYLOAD" >&2
+      exit 1
+    fi
+    DOCKER_ARGS+=(
+      -e "OMARCHY_ASAHI_UEFI_PAYLOAD=/omarchy-asahi-uefi-payload.zip"
+      -v "$HOST_ASAHI_UEFI_PAYLOAD:/omarchy-asahi-uefi-payload.zip:ro"
+    )
+  fi
+  if [[ -n ${OMARCHY_ASAHI_CONFIGURED_CONTRACT_PROOF:-} ]]; then
+    HOST_CONFIGURED_CONTRACT_PROOF=$(realpath -- \
+      "$OMARCHY_ASAHI_CONFIGURED_CONTRACT_PROOF")
+    if [[ ! -f $HOST_CONFIGURED_CONTRACT_PROOF || \
+      -L $HOST_CONFIGURED_CONTRACT_PROOF ]]; then
+      echo "Unsafe configured-target contract proof: $HOST_CONFIGURED_CONTRACT_PROOF" >&2
+      exit 1
+    fi
+    DOCKER_ARGS+=(
+      -e "OMARCHY_ASAHI_CONFIGURED_CONTRACT_PROOF=/omarchy-asahi-configured-contract-proof.json"
+      -v "$HOST_CONFIGURED_CONTRACT_PROOF:/omarchy-asahi-configured-contract-proof.json:ro"
+    )
+  fi
+fi
 
 if [[ -n $LOCAL_OMARCHY_PATH ]]; then
   DOCKER_ARGS+=(
@@ -266,8 +842,17 @@ if [[ -z "$NO_CACHE" ]]; then
   cache_scope="iso_${OMARCHY_MIRROR}"
   [[ $OMARCHY_ARCH == "x86_64" ]] || cache_scope+="_${OMARCHY_ARCH}"
   [[ $OMARCHY_MEDIA_TARGET != "aarch64/apple-silicon" ]] || cache_scope+="_apple_silicon"
-  OFFLINE_REPO_BUILD_CACHE_DIR="$HOME/.cache/omarchy/$cache_scope/airootfs/var/cache/omarchy"
-  mkdir -p "$OFFLINE_REPO_BUILD_CACHE_DIR"
+  cache_base=${ASAHI_CACHE_BASE:-${XDG_CACHE_HOME:-$HOME/.cache}/omarchy}
+  OFFLINE_REPO_BUILD_CACHE_DIR="$cache_base/$cache_scope/airootfs/var/cache/omarchy"
+  if (( asahi_full_os_package )); then
+    python3 "$BUILD_INPUT_ROOT/builder/asahi-lifecycle-lease.py" \
+      ensure-directory \
+      --path "$OFFLINE_REPO_BUILD_CACHE_DIR" \
+      --allowed-owner 0 \
+      --allowed-owner "$(id -u)"
+  else
+    mkdir -p "$OFFLINE_REPO_BUILD_CACHE_DIR"
+  fi
   DOCKER_ARGS+=(-v "$OFFLINE_REPO_BUILD_CACHE_DIR:/var/cache/airootfs/var/cache/omarchy")
 else
   # The locally cached :latest image is a cache too — docker run never
@@ -283,6 +868,32 @@ echo "Build image: $BUILD_IMAGE"
 [[ -z ${SOURCE_DATE_EPOCH:-} ]] || echo "SOURCE_DATE_EPOCH: $SOURCE_DATE_EPOCH"
 
 docker run "${BUILD_PLATFORM_ARGS[@]}" "${DOCKER_ARGS[@]}" "$BUILD_IMAGE" /$BUILD_SCRIPT
+
+if [[ $OMARCHY_ARTIFACT_KIND == "asahi-os-package" ]]; then
+  if [[ $OMARCHY_BUILD_MODE == diagnostic ]]; then
+    echo "diagnostic artifacts are never catalog eligible; review the build-evidence directory only."
+    exit 0
+  fi
+  package_filename=$(jq -er '.package_filename' \
+    "$BUILD_INPUT_ROOT/builder/products/omarchy-mx-mac.json")
+  [[ $package_filename == "${package_filename##*/}" && \
+    $package_filename == *.zip ]] || {
+    echo "Unsafe product package filename: $package_filename" >&2
+    exit 1
+  }
+  package_path=$BUILD_RELEASE_PATH/$package_filename
+  publication_manifest=$BUILD_RELEASE_PATH/build-evidence/$OMARCHY_BUILD_RUN_ID/release-publication.json
+  jq -e --arg run_id "$OMARCHY_BUILD_RUN_ID" \
+    --arg package_filename "$package_filename" '
+      .result == "passed" and .run_id == $run_id and
+      .package_filename == $package_filename
+    ' "$publication_manifest" >/dev/null
+  [[ -f $package_path ]]
+  [[ -f $package_path.asahi-package-evidence.json ]]
+  [[ -f $package_path.installer-data.json ]]
+  echo "Built Asahi OS package: $package_path"
+  exit 0
+fi
 
 latest_iso=$(\ls -t "$BUILD_RELEASE_PATH"/*-"$OMARCHY_ARCH".iso | head -n1)
 iso_ref="${latest_iso%.*}-$OMARCHY_ISO_REF.iso"

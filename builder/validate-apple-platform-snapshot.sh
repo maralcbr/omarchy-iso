@@ -3,7 +3,7 @@
 set -euo pipefail
 
 snapshot=${1:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/apple-platform-snapshot.json}
-expected_packages='["asahi-audio","asahi-bless","asahi-desktop-meta","asahi-fwextract","asahi-scripts","bankstown","linux-asahi","linux-asahi-headers","lzfse","m1n1","speakersafetyd","startup-disk","tiny-dfr","triforce-lv2","uboot-asahi","virglrenderer","widevine"]'
+expected_packages='["alsa-ucm-conf-asahi","asahi-audio","asahi-bless","asahi-desktop-meta","asahi-fwextract","asahi-scripts","bankstown","linux-asahi","linux-asahi-headers","lzfse","m1n1","speakersafetyd","startup-disk","tiny-dfr","triforce-lv2","uboot-asahi","virglrenderer","widevine"]'
 
 jq -e --argjson expected_packages "$expected_packages" '
   def hash: type == "string" and test("^[0-9a-f]{64}$");
@@ -18,7 +18,7 @@ jq -e --argjson expected_packages "$expected_packages" '
   (.trust.keyring.filename as $keyring_filename |
     .trust.keyring.url | endswith("/" + $keyring_filename)) and
   ([.packages[].name] | sort) == $expected_packages and
-  ([.packages[].name] | unique | length) == 17 and
+  ([.packages[].name] | unique | length) == 18 and
   all(.packages[];
     (.filename | type == "string" and length > 0) and
     (.sha256 | hash) and
