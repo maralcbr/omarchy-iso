@@ -231,7 +231,14 @@ cleanup() {
     stop_vm
   fi
 
-  rm -f "$RUN_DIR/.screen.ppm" "$RUN_DIR/.screen.png" "$QMP_SOCK"
+  rm -f "$RUN_DIR/.screen.ppm" "$RUN_DIR/.screen.png"
+  # A kept VM is only useful while its QMP socket exists: without it nothing
+  # can type the LUKS passphrase or take screendumps after this exits.
+  if $KEEP_RUNNING && vm_running; then
+    log "VM kept running; QMP socket: $QMP_SOCK"
+  else
+    rm -f "$QMP_SOCK"
+  fi
   open_screenshots
 
   return $status
@@ -1143,12 +1150,16 @@ sync_omarchy() {
 
   local target=".local/share/omarchy"
 
+  # COPYFILE_DISABLE stops macOS tar from shipping AppleDouble ._* metadata
+  # into the guest, where Hyprland's Lua loader requires ._foo.lua as modules
+  # and floods the session with config errors. .DS_Store is the same class of
+  # host artifact.
   if $SYNC_ALL; then
     log "Syncing $SYNC_DIR into the guest"
-    tar -C "$SYNC_DIR" --exclude .git -cf - . | ssh_guest "mkdir -p $target && tar -C $target -xf -"
+    COPYFILE_DISABLE=1 tar -C "$SYNC_DIR" --exclude .git --exclude .DS_Store -cf - . | ssh_guest "mkdir -p $target && tar -C $target -xf -"
   else
     log "Syncing $SYNC_DIR/test/acceptance into the guest"
-    tar -C "$SYNC_DIR/test" -cf - acceptance acceptance.d | ssh_guest "mkdir -p $target/test && tar -C $target/test -xf -"
+    COPYFILE_DISABLE=1 tar -C "$SYNC_DIR/test" --exclude .DS_Store -cf - acceptance acceptance.d | ssh_guest "mkdir -p $target/test && tar -C $target/test -xf -"
   fi
 }
 
