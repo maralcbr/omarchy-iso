@@ -255,7 +255,24 @@ mkdir -p "$stubs"
   echo '#!/bin/bash'
   echo "OMARCHY_OFFLINE_MIRROR='$mirror' OMARCHY_TARGET_PACKAGE_CACHE='$TARGET_CACHE' exec '$DIAGNOSE' \"\$@\""
 } >"$stubs/omarchy-install-diagnose-media"
-chmod +x "$stubs/omarchy-install-diagnose-media"
+cat >"$stubs/stty" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+[[ $# -eq 1 && $1 == size ]] || exit 2
+printf '40 120\n'
+STUB
+operating_system=$(/usr/bin/uname -s)
+if [[ $operating_system == Darwin ]]; then
+  cat >"$stubs/setsid" <<'STUB'
+#!/bin/bash
+# The shipped dashboard runs on Linux, where util-linux provides setsid.
+# This Darwin-only PTY fixture needs the command boundary, not a new session:
+# BSD script already owns the isolated pseudo-terminal used by the assertion.
+exec "$@"
+STUB
+  chmod +x "$stubs/setsid"
+fi
+chmod +x "$stubs/omarchy-install-diagnose-media" "$stubs/stty"
 
 state_file="$work/state.json"
 screen="$work/screen"
@@ -274,7 +291,7 @@ mkdir -p "$omarchy_share"
 } >"$omarchy_share/logo.txt"
 
 run_dashboard() {
-  local install_log="$1"
+  local install_log="$1" dashboard_command
 
   # A real failure carries the failed phase as well as the current one, and
   # that second summary line is another row the screen has to find space for.
@@ -284,8 +301,24 @@ run_dashboard() {
              "error": "Pacstrap failed. See /var/log/archinstall.log"}]}
 STATE
   : >"$screen"
-  script -qefc "stty rows 40 cols 120; PATH='$stubs:$PATH' OMARCHY_PATH='$omarchy_share' OMARCHY_UI_INTERACTIVE=no OMARCHY_UI_FAILURE_ACTION=exit OMARCHY_FAILURE_TAIL_LOG='$install_log' '$DASHBOARD' '$install_log' '$state_file' -- bash -c 'exit 1'" \
-    "$screen" >/dev/null 2>&1
+  dashboard_command="dashboard_tty=\$(tty); [[ -c \$dashboard_tty ]]; OMARCHY_DASHBOARD_TTY=\"\$dashboard_tty\" PATH='$stubs:$PATH' OMARCHY_PATH='$omarchy_share' OMARCHY_UI_INTERACTIVE=no OMARCHY_UI_FAILURE_ACTION=exit OMARCHY_FAILURE_TAIL_LOG='$install_log' '$BASH' '$DASHBOARD' '$install_log' '$state_file' -- '$BASH' -c 'exit 1'"
+  case "$operating_system" in
+    Darwin)
+      # BSD script takes the output file before an optional command vector;
+      # -F guarantees the final terminal repaint is flushed before inspection.
+      script -qF "$screen" "$BASH" -c "$dashboard_command" \
+        >/dev/null 2>&1
+      ;;
+    Linux)
+      # util-linux uses -O for the output log and -- for a command vector.
+      # -e returns the dashboard status and -f flushes its final repaint.
+      script -qef -O "$screen" -- "$BASH" -c "$dashboard_command" \
+        >/dev/null 2>&1
+      ;;
+    *)
+      fail "the PTY harness supports this operating system" "$operating_system"
+      ;;
+  esac
 }
 
 visible_screen() {
@@ -375,7 +408,7 @@ without_diagnosis=$(tail_filler_rows)
 
 (( with_diagnosis < without_diagnosis )) ||
   fail "the tail gives up rows to the diagnosis" \
-    "with: $with_diagnosis, without: $without_diagnosis"
+    "with: $with_diagnosis, without: $without_diagnosis"$'\n'"$(visible_screen | tail -n 45)"
 pass "the log tail gives up rows to the diagnosis so the screen still fits"
 
 # The screen is only as wide as the logo and the dashboard truncates to it with

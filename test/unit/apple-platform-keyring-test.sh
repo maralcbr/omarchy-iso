@@ -97,6 +97,28 @@ set -euo pipefail
 [[ $* == "GPGDir" ]]
 printf '%s\n' "$TEST_PACMAN_GPG_DIR"
 STUB
+cat >"$stubs/sha256sum" <<'STUB'
+#!/usr/bin/env python3
+import hashlib
+from pathlib import Path
+import sys
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+if sys.argv[1:] == ["--check", "--status"]:
+    for line in sys.stdin:
+        expected, filename = line.rstrip("\n").split("  ", 1)
+        if digest(Path(filename)) != expected:
+            raise SystemExit(1)
+elif len(sys.argv) == 2:
+    path = Path(sys.argv[1])
+    print(f"{digest(path)}  {path}")
+else:
+    raise SystemExit(2)
+STUB
 chmod +x "$stubs"/*
 
 run_installer() {

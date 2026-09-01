@@ -1,0 +1,6 @@
+# ZIP corruption fixtures rewrite one archive in place and stay in the serial lane.
+test/unit/asahi-os-package-contract-test.sh
+# This test owns a real PTY and checks terminal repaint ordering.
+test/unit/install-media-diagnosis-test.sh
+# Wall-clock CLI budget tests race the parallel pack; the serial lane keeps them honest.
+test/unit/test_asahi_source_impact.py

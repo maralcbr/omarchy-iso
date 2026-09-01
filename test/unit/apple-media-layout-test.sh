@@ -10,6 +10,7 @@ iso_tree="$work/iso"
 airootfs="$work/airootfs"
 snapshot="$ROOT/builder/apple-platform-snapshot.json"
 mkdir -p \
+  "$work/stubs" \
   "$iso_tree/EFI/BOOT" \
   "$iso_tree/arch/boot/aarch64" \
   "$iso_tree/boot/grub" \
@@ -18,9 +19,25 @@ mkdir -p \
   "$work/initramfs/hooks" \
   "$work/initramfs/usr/share/asahi-scripts"
 
-printf 'test PE payload\n' >"$work/pe-payload"
-objcopy -I binary -O pei-aarch64-little -B aarch64 \
-  "$work/pe-payload" "$iso_tree/EFI/BOOT/BOOTAA64.EFI"
+python3 - "$iso_tree/EFI/BOOT/BOOTAA64.EFI" <<'PY'
+from pathlib import Path
+import struct
+import sys
+
+pe = bytearray(4096)
+pe[:2] = b"MZ"
+struct.pack_into("<I", pe, 0x3C, 0x80)
+pe[0x80:0x84] = b"PE\0\0"
+struct.pack_into("<H", pe, 0x84, 0xAA64)
+Path(sys.argv[1]).write_bytes(pe)
+PY
+cat >"$work/stubs/objdump" <<'STUB'
+#!/bin/bash
+printf '%s\n' \
+  "$2: file format pei-aarch64-little" \
+  'architecture: aarch64, flags 0x0000012f:'
+STUB
+chmod +x "$work/stubs/objdump"
 cp "$iso_tree/EFI/BOOT/BOOTAA64.EFI" "$work/esp-BOOTAA64.EFI"
 printf 'test Asahi kernel\n' >"$iso_tree/arch/boot/aarch64/vmlinuz-linux-asahi"
 printf '#!/bin/ash\n' >"$work/initramfs/hooks/asahi"
@@ -57,9 +74,17 @@ drop_last_line() {
 }
 
 verify() {
-  "$ROOT/builder/verify-apple-media-layout.sh" \
+  PATH="$work/stubs:$PATH" "$ROOT/builder/verify-apple-media-layout.sh" \
     "$iso_tree" "$airootfs" "$work/esp-BOOTAA64.EFI" "$snapshot"
 }
+
+cat >"$work/stubs/lsinitcpio" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+[[ $* == "--nocolor --list "* ]]
+printf '%s\n' hooks/asahi usr/share/asahi-scripts/functions.sh
+STUB
+chmod +x "$work/stubs/lsinitcpio"
 
 layout=$(verify)
 jq -e '
@@ -79,15 +104,7 @@ jq -e '
 ' <<<"$layout" >/dev/null
 echo "ok - exact Apple media layout produces canonical structural evidence"
 
-mkdir -p "$work/stubs"
-cat >"$work/stubs/lsinitcpio" <<'STUB'
-#!/bin/bash
-set -euo pipefail
-[[ $* == "--nocolor --list "* ]]
-printf '%s\n' hooks/asahi usr/share/asahi-scripts/functions.sh
-STUB
-chmod +x "$work/stubs/lsinitcpio"
-PATH="$work/stubs:$PATH" verify >/dev/null
+verify >/dev/null
 grep -Fq 'lsinitcpio --nocolor --list' "$ROOT/builder/verify-apple-media-layout.sh"
 echo "ok - concatenated mkinitcpio images use the format-aware lister"
 

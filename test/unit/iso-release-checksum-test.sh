@@ -31,6 +31,8 @@ sandbox="$work/repo"
 mkdir -p "$sandbox/bin" "$sandbox/release" "$work/stubs"
 cp "$ROOT/bin/omarchy-iso-release" "$sandbox/bin/"
 printf 'not really an iso\n' >"$sandbox/release/omarchy-2099.01.01-x86_64-quattro.iso"
+export TEST_REAL_SHA256SUM
+TEST_REAL_SHA256SUM=$(command -v sha256sum)
 
 cat >"$work/stubs/omarchy-iso-sign" <<'STUB'
 #!/bin/bash
@@ -51,6 +53,15 @@ printf '|%s' "$@"
 printf '\n'
 [[ -n ${RCLONE_FAIL_ON:-} && $* == *"$RCLONE_FAIL_ON"* ]] && exit 1
 exit 0
+STUB
+
+cat >"$work/stubs/sha256sum" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+if [[ ${SHA256_FAIL:-} == 1 ]]; then
+  exit 74
+fi
+exec "$TEST_REAL_SHA256SUM" "$@"
 STUB
 
 chmod +x "$work/stubs"/*
@@ -91,20 +102,20 @@ if (cd "$sandbox/release" && sha256sum -c --status omarchy-9.9.9.iso.sha256 2>/d
 fi
 pass "sha256sum -c rejects a corrupted ISO"
 
-# An unreadable ISO must stop the release rather than publish an empty digest
-# beside a stale sidecar from the previous one.
+# A checksum failure must stop the release rather than publish an empty digest
+# beside a stale sidecar from the previous one. The explicit stub keeps this
+# predicate deterministic even when the suite runs as root in the builder.
 stale="$sandbox/release/omarchy-8.8.8.iso.sha256"
 printf 'deadbeef  omarchy-8.8.8.iso\n' >"$stale"
 rm "$sandbox/release/omarchy-2099.01.01-x86_64-quattro.iso"
 printf 'not really an iso\n' >"$sandbox/release/omarchy-2099.01.02-x86_64-quattro.iso"
 cp "$sandbox/release/omarchy-2099.01.02-x86_64-quattro.iso" "$sandbox/release/omarchy-8.8.8.iso"
-chmod 000 "$sandbox/release/omarchy-8.8.8.iso"
 
 set +e
-PATH="$work/stubs:$PATH" "$sandbox/bin/omarchy-iso-release" --no-make 8.8.8 >/dev/null 2>&1
+SHA256_FAIL=1 PATH="$work/stubs:$PATH" \
+  "$sandbox/bin/omarchy-iso-release" --no-make 8.8.8 >/dev/null 2>&1
 release_status=$?
 set -e
-chmod 644 "$sandbox/release/omarchy-8.8.8.iso"
 
 (( release_status != 0 )) ||
   fail "release stops when the ISO cannot be checksummed" "exit status was 0"

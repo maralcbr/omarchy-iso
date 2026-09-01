@@ -22,7 +22,7 @@ sys.modules.setdefault(
     "orchestrator.archinstall_adapter", types.ModuleType("orchestrator.archinstall_adapter")
 )
 
-from orchestrator import phases_impl  # noqa: E402
+from orchestrator import configured_phases, phases_impl  # noqa: E402
 from orchestrator.context import InstallContext  # noqa: E402
 
 
@@ -156,6 +156,14 @@ class ContextDeferProvisioningTest(unittest.TestCase):
         ctx = self.from_env()
         self.assertNotIn("encryption_password", ctx.user_credentials)
 
+    def test_build_run_log_path_is_selected_from_the_environment(self):
+        self.write_config(self.base_config(defer_provisioning=True))
+        evidence_log = self.dir / "evidence" / "configured-orchestrator.log"
+
+        ctx = self.from_env(OMARCHY_INSTALL_LOG_FILE=str(evidence_log))
+
+        self.assertEqual(ctx.log_path, evidence_log)
+
 
 def make_ctx(target, **overrides):
     defaults = dict(
@@ -180,7 +188,7 @@ class StageProvisioningStateTest(unittest.TestCase):
         self.target = Path(self.tmp.name) / "mnt"
         self.target.mkdir()
 
-        info_patch = mock.patch.object(phases_impl, "info")
+        info_patch = mock.patch.object(configured_phases, "info")
         info_patch.start()
         self.addCleanup(info_patch.stop)
 
@@ -190,7 +198,9 @@ class StageProvisioningStateTest(unittest.TestCase):
         node_name = phases_impl._node_tarball_pattern().replace("*", "24.0.0")
         self.node_tarball = self.packages / node_name
         self.node_tarball.write_bytes(b"node")
-        node_patch = mock.patch.object(phases_impl, "NODE_PACKAGES_DIR", self.packages)
+        node_patch = mock.patch.object(
+            configured_phases, "NODE_PACKAGES_DIR", self.packages
+        )
         node_patch.start()
         self.addCleanup(node_patch.stop)
 

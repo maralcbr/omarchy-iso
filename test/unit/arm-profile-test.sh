@@ -11,6 +11,7 @@ export OMARCHY_MEDIA_TARGET=aarch64/generic
 export OMARCHY_MIRROR=stable
 export OMARCHY_SETTINGS_PACKAGE=omarchy-settings-dev
 source "$ROOT/builder/architecture.sh"
+source "$ROOT/builder/archiso-media-output.sh"
 
 [[ $DISTRO_KEYRING_NAME == "archlinuxarm" ]]
 [[ $NODE_DIST_ARCH == "arm64" ]]
@@ -68,16 +69,18 @@ apple_filtered=$(
     filter_target_packages
 )
 [[ $apple_filtered == $'linux-asahi\nlinux-asahi-headers\nlinux-asahi\nlinux-asahi-headers\nasahi-desktop-meta\nasahi-fwextract\nvulkan-asahi\nwidevine\ngrub\nbase' ]]
-grep -Fq 'required_package_files+=("${apple_keyring_names[@]}" "${apple_package_names[@]}")' \
-  "$ROOT/builder/build-iso.sh"
-for package in asahi-audio asahi-fwextract asahi-scripts grub linux-asahi \
-  linux-asahi-headers m1n1 speakersafetyd uboot-asahi; do
-  grep -Eq "[[:space:]]${package}([[:space:]\\\\]|$)" "$ROOT/builder/build-iso.sh" || {
+package_stage="$ROOT/builder/asahi-stages/verified-package-cache.sh"
+grep -Fq '"${apple_keyring_names[@]}" "${apple_package_names[@]}"' \
+  "$package_stage"
+for package in alsa-ucm-conf-asahi asahi-audio asahi-bless asahi-fwextract \
+  asahi-scripts grub linux-asahi linux-asahi-headers m1n1 speakersafetyd \
+  startup-disk uboot-asahi; do
+  grep -Eq "[[:space:]]${package}([[:space:]\\\\]|$)" "$package_stage" || {
     echo "Apple target transaction does not explicitly select $package" >&2
     exit 1
   }
 done
-grep -Fq 'asahi-alarm-keyring asahi-audio' "$ROOT/builder/build-iso.sh"
+grep -Fq 'alsa-ucm-conf-asahi asahi-alarm-keyring' "$package_stage"
 
 profile="$work/profile"
 mkdir -p \
@@ -110,9 +113,9 @@ grep -Fq 'efiboot_files+=("${work_dir}/BOOT${uefi_arch[$arch]}.EFI")' \
 grep -Fq 'required_grubmodules=(configfile iso9660 linux normal search search_fs_uuid)' \
   "$ROOT/builder/archiso-aarch64.patch"
 grep -Fq 'patch --forward --silent "${MKARCHISO[0]}" /builder/archiso-aarch64.patch' \
-  "$ROOT/builder/build-iso.sh"
+  "$ROOT/builder/archiso-media-output.sh"
 grep -Fq 'printf '\''%s\n'\'' archlinuxarm-keyring >>"$shipped_base_packages"' \
-  "$ROOT/builder/build-iso.sh"
+  "$package_stage"
 
 apple_profile="$work/apple-profile"
 cp -a "$profile" "$apple_profile"

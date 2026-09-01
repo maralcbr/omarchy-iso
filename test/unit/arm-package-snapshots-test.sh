@@ -6,8 +6,17 @@ ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+# Superseded assertion (until 2026-08-29): this predicate was pinned in
+# builder/build-iso.sh. The schema-2 work dismantled that file (24,799 -> 1,346
+# bytes) and moved the snapshot-count guard verbatim into the
+# verified-package-cache stage. Re-pinned to the new owner; both count branches
+# are pinned here, where only the generic branch was pinned before, so the
+# replacement is strictly stronger.
+snapshot_count_guard=$ROOT/builder/asahi-stages/verified-package-cache.sh
 grep -Fq '${#snapshot_packages[@]} == ARM_REPOSITORY_PACKAGE_COUNT + 6' \
-  "$ROOT/builder/build-iso.sh"
+  "$snapshot_count_guard"
+grep -Fq 'ARM_REPOSITORY_PACKAGE_COUNT + 7 + apple_platform_package_count' \
+  "$snapshot_count_guard"
 
 builder="$work/builder"
 remote="$work/remote"

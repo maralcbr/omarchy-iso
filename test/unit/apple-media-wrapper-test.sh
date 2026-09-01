@@ -16,9 +16,24 @@ mkdir -p \
   "$work/initramfs/hooks" \
   "$work/initramfs/usr/share/asahi-scripts"
 
-printf 'test PE payload\n' >"$work/pe-payload"
-objcopy -I binary -O pei-aarch64-little -B aarch64 \
-  "$work/pe-payload" "$work/source-iso/EFI/BOOT/BOOTAA64.EFI"
+python3 - "$work/source-iso/EFI/BOOT/BOOTAA64.EFI" <<'PY'
+from pathlib import Path
+import struct
+import sys
+
+pe = bytearray(4096)
+pe[:2] = b"MZ"
+struct.pack_into("<I", pe, 0x3C, 0x80)
+pe[0x80:0x84] = b"PE\0\0"
+struct.pack_into("<H", pe, 0x84, 0xAA64)
+Path(sys.argv[1]).write_bytes(pe)
+PY
+cat >"$work/stubs/objdump" <<'STUB'
+#!/bin/bash
+printf '%s\n' \
+  "$2: file format pei-aarch64-little" \
+  'architecture: aarch64, flags 0x0000012f:'
+STUB
 cp "$work/source-iso/EFI/BOOT/BOOTAA64.EFI" "$work/esp-BOOTAA64.EFI"
 printf 'test Asahi kernel\n' >"$work/source-iso/arch/boot/aarch64/vmlinuz-linux-asahi"
 printf '#!/bin/ash\n' >"$work/initramfs/hooks/asahi"
@@ -104,6 +119,12 @@ cat >"$work/stubs/mcopy" <<'STUB'
 set -euo pipefail
 destination=${!#}
 cp "$ESP_BOOT_FIXTURE" "$destination"
+STUB
+cat >"$work/stubs/lsinitcpio" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+[[ $* == "--nocolor --list "* ]]
+printf '%s\n' hooks/asahi usr/share/asahi-scripts/functions.sh
 STUB
 chmod +x "$work/stubs"/*
 

@@ -6,11 +6,28 @@
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+jobs=${OMARCHY_BUILD_JOBS:-10}
+mode=${OMARCHY_BUILD_MODE:-qualification}
+test_timeout_seconds=${OMARCHY_TEST_TIMEOUT_SECONDS:-300}
+result_ledger=${OMARCHY_TEST_RESULT_LEDGER:-$ROOT/test-runs/unit-test-results.json}
 
-for test in "$ROOT"/test/unit/*-test.sh; do
-  printf '==> %s\n' "${test#$ROOT/}"
-  bash "$test"
-done
+if (( BASH_VERSINFO[0] < 5 )); then
+  echo "test/all requires Bash 5+; found $BASH_VERSION at $BASH" >&2
+  exit 2
+fi
+epoch_first=${EPOCHREALTIME:-}
+epoch_second=${EPOCHREALTIME:-}
+if [[ ! $epoch_first =~ ^[0-9]+\.[0-9]+$ ||
+  ! $epoch_second =~ ^[0-9]+\.[0-9]+$ ||
+  $epoch_first == "$epoch_second" ]]; then
+  echo "test/all requires a working EPOCHREALTIME clock" >&2
+  exit 2
+fi
+export OMARCHY_TEST_BASH=$BASH
 
-printf '==> test/unit/test_*.py\n'
-python3 -m unittest discover -t "$ROOT" -s "$ROOT/test/unit"
+python3 "$ROOT/test/run-manifest.py" \
+  --jobs "$jobs" \
+  --mode "$mode" \
+  --test-timeout-seconds "$test_timeout_seconds" \
+  --result-ledger "$result_ledger" \
+  "$@"
