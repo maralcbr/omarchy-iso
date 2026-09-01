@@ -7,3 +7,6 @@ __pycache__/
 
 # Acceptance test harness artifacts
 test-runs/**
+
+# macOS Finder metadata
+.DS_Store
