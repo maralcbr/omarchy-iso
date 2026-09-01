@@ -86,6 +86,11 @@ class InstallContext:
 
         state_dir = Path(os.environ.get("OMARCHY_INSTALL_STATE_DIR", "/run/omarchy-install"))
         state_dir.mkdir(parents=True, exist_ok=True)
+        log_path = Path(
+            os.environ.get("OMARCHY_INSTALL_LOG_FILE", "/var/log/omarchy-install.log")
+        )
+        if not log_path.is_absolute():
+            raise RuntimeError("OMARCHY_INSTALL_LOG_FILE must be an absolute path")
 
         if defer_provisioning:
             # Encrypted deferred-provisioning installs have no user password to protect LUKS
@@ -115,6 +120,7 @@ class InstallContext:
             omarchy_install=omarchy_install,
             defer_provisioning=defer_provisioning,
             state_dir=state_dir,
+            log_path=log_path,
         )
         disk_config = user_configuration.get("disk_config", {})
         target_mount = omarchy_install.get("target_mount") or disk_config.get("mountpoint")

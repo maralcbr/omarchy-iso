@@ -28,14 +28,16 @@ def build_phases(ctx: InstallContext):
     create/mount the layout, while protected provides an already-mounted target
     and the partition details Omarchy needs for boot/fstab generation.
     """
-    from .phases_impl import (
+    from .configured_phases import (
         prepare_live,
         prepare_install_target,
         arch_install_system,
         configure_hibernation,
         run_system_finalizer,
         stage_provisioning_state,
-        finalize_limine_boot,
+    )
+    from .finalized_phases import (
+        finalize_boot,
         run_chroot_finalizer,
         configure_dns_resolver,
         configure_login,
@@ -52,10 +54,10 @@ def build_phases(ctx: InstallContext):
         ("Installing Arch + Omarchy",  arch_install_system),
         ("Configuring hibernation",    configure_hibernation),
         ("Configuring system",         run_system_finalizer),
-        # Before finalize_limine_boot: the deferred-provisioning cryptkey drop-in and keyfile
-        # must be in place for the final UKI build.
+        # Before finalize_boot: deferred-provisioning state must be in place
+        # before the boot image is generated.
         ("Staging provisioning",          stage_provisioning_state),
-        ("Finalizing Limine boot",     finalize_limine_boot),
+        ("Finalizing boot",            finalize_boot),
         ("Finalizing user",            run_chroot_finalizer),
         ("Configuring login",          configure_login),
         ("Configuring SSH access",     configure_ssh_access),
@@ -77,7 +79,7 @@ def main() -> int:
     who = ctx.username or "deferred provisioning (user created at first boot)"
     info(f"Installing Omarchy for {who} → {ctx.target}")
 
-    from .phases_impl import (
+    from .configured_phases import (
         boost_cpu_governor,
         cleanup_bind_mounts,
         cleanup_protected_state,

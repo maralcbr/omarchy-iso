@@ -24,6 +24,7 @@ class PhaseError(Exception):
 def run(ctx: InstallContext, phases: list[tuple[str, PhaseFn]]) -> None:
     ctx.state_dir.mkdir(parents=True, exist_ok=True)
     state_path = ctx.state_dir / "state.json"
+    timing_path = _timing_path(ctx)
     state = {
         "started_at": time.time(),
         # The dashboard counts packages under <target>/var/lib/pacman/local;
@@ -73,9 +74,18 @@ def run(ctx: InstallContext, phases: list[tuple[str, PhaseFn]]) -> None:
     state["expected_packages"] = _expected_package_count()
     _write_state(state_path, state)
 
-    timing_path = ctx.target / "var" / "log" / "omarchy-install-timing.json"
     timing_path.parent.mkdir(parents=True, exist_ok=True)
     _write_state(timing_path, state)
+
+
+def _timing_path(ctx: InstallContext) -> Path:
+    value = os.environ.get("OMARCHY_INSTALL_TIMING_FILE")
+    if value is None:
+        return ctx.target / "var" / "log" / "omarchy-install-timing.json"
+    path = Path(value)
+    if not path.is_absolute():
+        raise RuntimeError("OMARCHY_INSTALL_TIMING_FILE must be an absolute path")
+    return path
 
 
 def _installed_package_count(target: Path) -> int:
@@ -90,7 +100,10 @@ def _installed_package_count(target: Path) -> int:
 
 
 def _expected_package_count() -> int:
-    path = Path("/usr/share/omarchy-iso/expected-packages")
+    media_root = Path(
+        os.environ.get("OMARCHY_ISO_MEDIA_ROOT", "/usr/share/omarchy-iso")
+    )
+    path = media_root / "expected-packages"
     try:
         return int(path.read_text().split()[0])
     except (OSError, ValueError, IndexError):
