@@ -5,10 +5,12 @@ verified-package-cache checkpoint identity, so the canonical projection in
 builder/asahi_toolchain_metadata.py must reproduce, byte for byte, what the
 retired jq program produced.
 
-The reference is deliberately not the working tree: it is the copy of
-bin/omarchy-iso-make preserved in the Phase A rollback checkpoint, which is
-read-only and cannot drift. Goldens are generated from that program with jq at
-test time and compared against the canonical emitter.
+The reference is the retired jq filter preserved verbatim below. It was
+lifted from the Phase A rollback checkpoint copy of bin/omarchy-iso-make
+before that checkpoint was retired (its dirty tree is committed as the
+schema-2 pipeline); this committed test is now the authoritative record of
+the retired program. Goldens are generated from that filter with jq at test
+time and compared against the canonical emitter.
 """
 
 from __future__ import annotations
@@ -29,15 +31,10 @@ sys.path.insert(0, str(ROOT / "builder"))
 
 import asahi_toolchain_metadata as canonical  # noqa: E402
 
-CHECKPOINT_ISO_MAKE = Path(
-    "/Users/maralc/dev/omarchy/rollback-checkpoints/"
-    "2026-08-29-iso-schema2-dirty-tree/worktree/bin/omarchy-iso-make"
-)
-
 # The projection filter exactly as it shipped before Phase C1, lifted from the
-# preserved checkpoint copy. test_reference_program_is_the_preserved_one asserts
-# this text is really in that file, so the reference cannot quietly become
-# something else.
+# Phase A checkpoint copy of bin/omarchy-iso-make before that checkpoint was
+# retired. test_retired_program_stays_retired asserts the current program no
+# longer carries it, so the canonical emitter cannot quietly regain a rival.
 RETIRED_PROJECTION_FILTER = """{schema_version: 1, stage, mode, checkpoint_identity, input_digest,
     validation, output, compatibility: (.compatibility // null)}"""
 
@@ -67,12 +64,9 @@ class ProjectionByteStabilityTests(unittest.TestCase):
             )
             return done.stdout
 
-    def test_reference_program_is_the_preserved_one(self) -> None:
-        self.assertTrue(
-            CHECKPOINT_ISO_MAKE.is_file(),
-            f"the Phase A checkpoint copy is missing: {CHECKPOINT_ISO_MAKE}",
-        )
-        self.assertIn(RETIRED_PROJECTION_FILTER, CHECKPOINT_ISO_MAKE.read_text())
+    def test_retired_program_stays_retired(self) -> None:
+        current_iso_make = (ROOT / "bin" / "omarchy-iso-make").read_text()
+        self.assertNotIn(RETIRED_PROJECTION_FILTER, current_iso_make)
 
     def test_every_fixture_projects_byte_identically(self) -> None:
         for name in fixtures.FIXTURE_NAMES:
