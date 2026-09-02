@@ -79,4 +79,8 @@ run_configured_target_stage() {
     --output esp-image="$configured_directory/esp-build.img" \
     --output stage-state="$configured_directory/state" \
     --output installed-contract="$configured_installed_contract"
+  # The base images were copied and checkpointed; nothing downstream reads
+  # them. Drop them now so three image sets never coexist in the container.
+  rm -f -- "$base_directory/root.img" "$base_directory/boot.img" \
+    "$base_directory/esp-build.img"
 }

@@ -93,4 +93,8 @@ run_finalized_boot_stage() {
     --output esp-tree="$finalized_directory/esp" \
     --output installed-contents="$finalized_directory/installed-contents.json" \
     --output installed-config-verification="$finalized_directory/installed-config-verification.json"
+  # The configured images are consumed; only the configured contract JSON is
+  # still read by installer-metadata.
+  rm -f -- "$configured_directory/root.img" "$configured_directory/boot.img" \
+    "$configured_directory/esp-build.img"
 }

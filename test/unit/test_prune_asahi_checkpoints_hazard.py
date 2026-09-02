@@ -1,14 +1,14 @@
-"""Characterize the pruner's externally-referenced-object hazard.
+"""Retention keeps every object reachable from a protected root.
 
-Added 2026-08-29 (plan Phase B).
+Added 2026-08-29 as a characterization of the pruner's externally-referenced
+object hazard; flipped 2026-09-02 when the hazard was fixed.
 
 builder/prune-asahi-checkpoints.py decides which objects to keep by walking the
-checkpoints that remain in the store after eviction (`referenced_objects` over
-`remaining`). An object referenced only by a manifest that lives outside the
-store is therefore unreferenced as far as the pruner is concerned, and is
-deleted -- even though `--protect-run-manifest` exists, because that option
-protects checkpoint identities, not the objects an external manifest depends
-on.
+checkpoints that remain in the store after eviction. A run manifest lives
+outside the store, so the objects it names were invisible to that walk and were
+deleted as unreferenced even when the manifest was passed as
+--protect-run-manifest. The pruner now reads object references out of every
+protected run manifest and keeps those objects too.
 
 These tests run entirely inside a temporary fixture store. The real checkpoint
 store is never located, opened, or passed to prune().
@@ -135,6 +135,7 @@ class PrunerExternalReferenceTests(unittest.TestCase):
         self.addCleanup(external_manifest.unlink, missing_ok=True)
 
         return {
+            "external_manifest": external_manifest,
             "shared": shared,
             "stale": stale,
             "external": external,
@@ -143,15 +144,19 @@ class PrunerExternalReferenceTests(unittest.TestCase):
             "oldest": oldest,
         }
 
-    def prune_with_limit(self, *, per_stage: int, protected=frozenset()) -> dict:
+    def prune_with_limit(
+        self, *, per_stage: int, protected=frozenset(), manifests=()
+    ) -> dict:
+        identities, objects = self.module.protected_roots(list(manifests))
         return self.module.prune(
             cache_root=self.cache,
             maximum_bytes=MAXIMUM_BYTES,
             maximum_checkpoints_per_stage=per_stage,
-            protected=set(protected),
+            protected=set(protected) | identities,
+            protected_objects=objects,
         )
 
-    # -- characterization: today's behaviour -------------------------------
+    # -- retention contract -------------------------------------------------
 
     def test_prune_evicts_the_oldest_checkpoint_over_the_per_stage_limit(self) -> None:
         store = self.build_store()
@@ -168,12 +173,9 @@ class PrunerExternalReferenceTests(unittest.TestCase):
         self.assertTrue(store["newest"].exists())
         self.assertTrue(store["middle"].exists())
 
-    def test_prune_deletes_an_object_referenced_only_by_an_external_manifest(
-        self,
-    ) -> None:
-        # The documented hazard. The external manifest is a live reference held
-        # outside this store; the pruner cannot see it and reclaims the object
-        # as unreferenced.
+    def test_prune_deletes_an_object_nobody_protects(self) -> None:
+        # A manifest outside the store that is NOT handed to the pruner is
+        # unknown to it; its object is reclaimed with the evicted checkpoint's.
         store = self.build_store()
 
         report = self.prune_with_limit(per_stage=2)
@@ -182,30 +184,27 @@ class PrunerExternalReferenceTests(unittest.TestCase):
             item["sha256"] for item in report["evicted"] if item["kind"] == "object"
         }
         self.assertIn(store["external"], deleted_objects)
-        self.assertFalse(self.object_path(store["external"]).exists())
-
-        # The stale object went with its evicted checkpoint, which is correct.
         self.assertIn(store["stale"], deleted_objects)
         # The object a surviving checkpoint references is kept.
         self.assertNotIn(store["shared"], deleted_objects)
         self.assertTrue(self.object_path(store["shared"]).exists())
 
-    def test_protecting_a_checkpoint_does_not_protect_external_objects(self) -> None:
-        # --protect-run-manifest protects checkpoint identities. Protecting the
-        # identity named by the external manifest keeps nothing, because no
-        # checkpoint by that identity exists in this store to be walked for
-        # references.
+    def test_a_protected_run_manifest_protects_the_objects_it_names(self) -> None:
         store = self.build_store()
 
         report = self.prune_with_limit(
-            per_stage=2, protected={(STAGE, "4" * 64)}
+            per_stage=2, manifests=[store["external_manifest"]]
         )
 
         deleted_objects = {
             item["sha256"] for item in report["evicted"] if item["kind"] == "object"
         }
-        self.assertIn(store["external"], deleted_objects)
-        self.assertFalse(self.object_path(store["external"]).exists())
+        self.assertNotIn(store["external"], deleted_objects)
+        self.assertTrue(self.object_path(store["external"]).exists())
+        self.assertEqual(report["protected_objects"], [store["external"]])
+        # Eviction of the over-limit checkpoint is unaffected.
+        self.assertIn(store["stale"], deleted_objects)
+        self.assertFalse(store["oldest"].exists())
 
     def test_prune_never_touches_paths_outside_the_cache_root(self) -> None:
         # Guards this fixture as much as the pruner: everything removed must sit
@@ -220,22 +219,13 @@ class PrunerExternalReferenceTests(unittest.TestCase):
         self.assertTrue(outside.exists())
         self.assertEqual(os.path.commonpath([str(self.cache)]), str(self.cache))
 
-    # -- intended behaviour ------------------------------------------------
-
-    @unittest.expectedFailure
     def test_externally_protected_roots_are_retained(self) -> None:
-        # Intended contract, not current behaviour: an object reachable from a
-        # protected root must survive retention, whether that root is a
-        # checkpoint inside the store or a manifest outside it.
-        #
-        # Phrased against the outcome rather than any particular mechanism, so
-        # it turns green under either fix: teaching prune() to read object
-        # references out of the protected run manifests it is given, or
-        # requiring external references to be registered in the store before
-        # retention may run.
+        # An object reachable from a protected root survives retention,
+        # whether that root is a checkpoint inside the store or a manifest
+        # outside it.
         store = self.build_store()
 
-        self.prune_with_limit(per_stage=2, protected={(STAGE, "4" * 64)})
+        self.prune_with_limit(per_stage=2, manifests=[store["external_manifest"]])
 
         self.assertTrue(
             self.object_path(store["external"]).exists(),

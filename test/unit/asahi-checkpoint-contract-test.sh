@@ -199,9 +199,11 @@ grep -Fq -- '--input finalized-product="$finalized_product_manifest"' \
 grep -Fq -- '--stage configured-target' "$package_builder"
 grep -Fq -- '--stage finalized-boot' "$package_builder"
 grep -Fq 'source /builder/asahi-build-reporting.sh' "$package_builder"
-grep -Fq 'record_diagnostic_retention_skip "$run_evidence"' "$package_builder"
-grep -Fq 'diagnostic-additive-proof-no-eviction' "$build_reporting"
-echo "ok - package stages are independently checkpointed and diagnostic-safe"
+# Retention runs after both build modes (2026-09-02) and records a skip only
+# when the operator opts out; there is no silent diagnostic exemption.
+[[ $(grep -c '^ *apply_checkpoint_retention$' "$package_builder") == 2 ]]
+grep -Fq 'retention-disabled-by-operator' "$build_reporting"
+echo "ok - package stages are independently checkpointed and retention-bounded"
 
 for function_name in \
   create_stage_identity admit_stage_identity restore_stage store_stage; do

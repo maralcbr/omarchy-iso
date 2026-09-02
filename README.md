@@ -48,6 +48,15 @@ Reuse the root instead and clear only the stage checkpoints:
 It keeps `builder-toolchain/`, removes `checkpoints/` and `objects/`, and runs
 under the same host lease as the build, so it refuses to run while an Apple
 build is in progress. Pass `--dry-run` first to see what it would remove.
+
+Every build also prunes its own leftovers as it goes: inside the container
+each stage's images are deleted as soon as the next stage has consumed them,
+and at the end of the build the checkpoint store is trimmed to the newest
+three checkpoints per stage within the build lock's byte budget (set
+`OMARCHY_CHECKPOINT_RETENTION_MAX_BYTES` to a smaller budget on a small host,
+or `OMARCHY_APPLY_CHECKPOINT_RETENTION=0` to skip pruning). Objects named by
+the current run's manifests are never pruned; the result is recorded in
+`build-evidence/<run>/retention.json`.
 Qualification builds never read old stage checkpoints, so nothing is lost;
 what the reset removes is the same-identity checkpoint that would otherwise
 make the store fail closed when a rebuilt image is not byte-identical.

@@ -293,7 +293,7 @@ source /builder/asahi-build-reporting.sh
 
 if [[ $build_mode == diagnostic ]]; then
   # diagnostic builds never emit a release ZIP and are never catalog eligible.
-  record_diagnostic_retention_skip "$run_evidence"
+  apply_checkpoint_retention
   python3 /builder/summarize-asahi-build.py \
     --mode "$build_mode" --run-id "$run_id" --evidence-root "$run_evidence" \
     --output "$run_evidence/build-report.json"
@@ -311,6 +311,10 @@ private_release_device=$(stat -c '%d' -- "$private_release_root")
 private_release_inode=$(stat -c '%i' -- "$private_release_root")
 package=$private_release_root/$package_filename
 cp --sparse=always "$sealed_package" "$package"
+# The package is checkpointed and copied; the sealed copy and the finalized
+# images it was built from are dead weight in the container from here on.
+rm -f -- "$sealed_package" "$finalized_directory/root.img" \
+  "$finalized_directory/boot.img"
 
 source /builder/asahi-stages/installer-metadata.sh
 run_installer_metadata_stage

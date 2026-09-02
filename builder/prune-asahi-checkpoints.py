@@ -52,16 +52,42 @@ def load_json(path: Path) -> dict:
     return value
 
 
-def protected_identities(paths: list[Path]) -> set[tuple[str, str]]:
-    result = set()
+def manifest_object_references(manifest: dict, *, role: str) -> set[str]:
+    references = set()
+    for output in manifest.get("outputs", []):
+        storage = output.get("storage", {})
+        if storage.get("kind") == "sha256-object":
+            digest = storage.get("sha256")
+            if not isinstance(digest, str) or not DIGEST.fullmatch(digest):
+                raise RetentionError(f"{role} contains an invalid object reference")
+            references.add(digest)
+    return references
+
+
+def protected_roots(paths: list[Path]) -> tuple[set[tuple[str, str]], set[str]]:
+    """Read the identities and object references of protected run manifests.
+
+    A run manifest lives outside the store (in the build's evidence
+    directory), so the objects it names are invisible to the reference walk
+    over surviving checkpoints. Until 2026-09-02 only the identity was
+    protected, and an object referenced solely from such a manifest was
+    deleted as unreferenced; that hazard is why retention stayed gated off.
+    """
+    identities = set()
+    objects = set()
     for path in paths:
         value = load_json(path)
         stage = value.get("stage")
         identity = value.get("checkpoint_identity")
         if not isinstance(stage, str) or not isinstance(identity, str) or not DIGEST.fullmatch(identity):
             raise RetentionError(f"protected run manifest lacks an exact identity: {path}")
-        result.add((stage, identity))
-    return result
+        identities.add((stage, identity))
+        objects |= manifest_object_references(value, role="protected run manifest")
+    return identities, objects
+
+
+def protected_identities(paths: list[Path]) -> set[tuple[str, str]]:
+    return protected_roots(paths)[0]
 
 
 def writable_remove_tree(path: Path) -> int:
@@ -103,13 +129,7 @@ def referenced_objects(records: list[dict]) -> set[str]:
     references = set()
     for record in records:
         manifest = load_json(record["path"] / "manifest.json")
-        for output in manifest.get("outputs", []):
-            storage = output.get("storage", {})
-            if storage.get("kind") == "sha256-object":
-                digest = storage.get("sha256")
-                if not isinstance(digest, str) or not DIGEST.fullmatch(digest):
-                    raise RetentionError("checkpoint contains an invalid object reference")
-                references.add(digest)
+        references |= manifest_object_references(manifest, role="checkpoint")
     return references
 
 
@@ -119,6 +139,7 @@ def prune(
     maximum_bytes: int,
     maximum_checkpoints_per_stage: int,
     protected: set[tuple[str, str]],
+    protected_objects: set[str] = frozenset(),
 ) -> dict:
     require_directory(cache_root, "cache root")
     if maximum_bytes <= 0 or maximum_checkpoints_per_stage <= 0:
@@ -167,7 +188,7 @@ def prune(
         )
         remaining.remove(record)
 
-    references = referenced_objects(remaining)
+    references = referenced_objects(remaining) | set(protected_objects)
     objects = cache_root / "objects" / "sha256"
     if objects.exists():
         require_directory(objects, "object store")
@@ -204,6 +225,7 @@ def prune(
             {"stage": stage, "checkpoint_identity": identity}
             for stage, identity in sorted(protected)
         ],
+        "protected_objects": sorted(protected_objects),
         "evicted": evicted,
     }
 
@@ -225,11 +247,13 @@ def main() -> int:
     parser.add_argument("--protect-run-manifest", action="append", type=Path, default=[])
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    identities, objects = protected_roots(args.protect_run_manifest)
     report = prune(
         cache_root=args.cache_root,
         maximum_bytes=args.maximum_bytes,
         maximum_checkpoints_per_stage=args.maximum_checkpoints_per_stage,
-        protected=protected_identities(args.protect_run_manifest),
+        protected=identities,
+        protected_objects=objects,
     )
     if args.output is not None:
         atomic_json(args.output, report)
