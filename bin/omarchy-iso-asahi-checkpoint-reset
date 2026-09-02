@@ -1,0 +1,69 @@
+#!/bin/bash
+#
+# Clear the stage checkpoints and object store of an Apple Silicon checkpoint
+# root while keeping its verified builder-toolchain checkpoint.
+#
+# A qualification build never reads old stage checkpoints (its policy is
+# write-only), but it does require a previously verified toolchain
+# checkpoint in the root, and a stage checkpoint left behind by an earlier
+# build with the same identity makes the store fail closed when the rebuilt
+# image bytes differ. Starting a brand-new root each time solves both at the
+# cost of a full diagnostic build (~12 minutes) to bootstrap the toolchain.
+# This helper gives the same clean slate without that build.
+#
+# The deletion runs under the shared host lifecycle lease, so it fails closed
+# while any Apple build is running.
+
+set -euo pipefail
+
+BUILD_ROOT=$(cd -- "${BASH_SOURCE[0]%/*}/.." && pwd -P)
+cache_base=${XDG_CACHE_HOME:-$HOME/.cache}/omarchy
+checkpoint_root=${1:-${OMARCHY_ASAHI_CHECKPOINT_ROOT:-$cache_base/asahi-checkpoints}}
+dry_run=0
+if [[ ${1:-} == --dry-run ]]; then
+  dry_run=1
+  checkpoint_root=${2:-${OMARCHY_ASAHI_CHECKPOINT_ROOT:-$cache_base/asahi-checkpoints}}
+fi
+
+fail() {
+  echo "omarchy-iso-asahi-checkpoint-reset: $*" >&2
+  exit 1
+}
+
+[[ -d $checkpoint_root && ! -L $checkpoint_root ]] ||
+  fail "checkpoint root is not a real directory: $checkpoint_root"
+case "$(cd -- "$checkpoint_root" && pwd -P)/" in
+  "$(cd -- "$cache_base" && pwd -P)"/*) ;;
+  *) fail "checkpoint root must live under $cache_base: $checkpoint_root" ;;
+esac
+toolchain_manifests=$(find "$checkpoint_root/builder-toolchain" -mindepth 2 \
+  -maxdepth 2 -name manifest.json 2>/dev/null | wc -l | tr -d ' ')
+(( toolchain_manifests >= 1 )) ||
+  fail "no builder-toolchain checkpoint in $checkpoint_root; a fresh root needs a diagnostic build first"
+
+targets=()
+for directory in checkpoints objects; do
+  [[ -e $checkpoint_root/$directory ]] && targets+=("$checkpoint_root/$directory")
+done
+if (( ${#targets[@]} == 0 )); then
+  echo "Nothing to clear in $checkpoint_root (builder-toolchain kept)."
+  exit 0
+fi
+
+echo "Keeping:  $checkpoint_root/builder-toolchain ($toolchain_manifests checkpoint)"
+echo "Clearing: ${targets[*]}"
+du -sh "${targets[@]}" 2>/dev/null || true
+if (( dry_run )); then
+  echo "Dry run: nothing deleted."
+  exit 0
+fi
+
+# Checkpoint trees are made immutable (mode a-w) when stored; restore owner
+# write access before removing them. Everything runs inside the lease child.
+python3 "$BUILD_ROOT/builder/asahi-lifecycle-lease.py" run \
+  --lease-root "$cache_base" \
+  --allowed-owner 0 \
+  --allowed-owner "$(id -u)" \
+  -- /bin/sh -c 'chmod -R u+w "$@" && rm -rf "$@"' reset "${targets[@]}" ||
+  fail "could not clear $checkpoint_root (is an Apple build running?)"
+echo "Cleared. The next qualification build can reuse $checkpoint_root without a diagnostic build."

@@ -420,6 +420,44 @@ class AsahiCheckpointTests(unittest.TestCase):
                 self.assertIsInstance(seconds, float)
                 self.assertGreaterEqual(seconds, 0.0)
 
+    def test_sha256_file_hashes_holes_without_reading_them(self) -> None:
+        # The digest must cover the logical stream, holes included, exactly
+        # as a linear read would; but the holes must come from the zero buffer,
+        # not from a read, or an empty 34 GB image costs a full pass.
+        source = self.root / "holes.img"
+        with source.open("wb") as stream:
+            stream.truncate(64 * 1024 * 1024)
+            stream.seek(20 * 1024 * 1024)
+            stream.write(b"data" * 1024)
+            stream.seek(40 * 1024 * 1024 + 123)
+            stream.write(os.urandom(300000))
+            stream.truncate(64 * 1024 * 1024 + 7)
+        import hashlib
+
+        linear = hashlib.sha256(source.read_bytes()).hexdigest()
+        real_read = os.read
+        read_bytes = 0
+
+        def counting_read(descriptor, size):
+            nonlocal read_bytes
+            chunk = real_read(descriptor, size)
+            read_bytes += len(chunk)
+            return chunk
+
+        with source.open("rb") as probe:
+            try:
+                os.lseek(probe.fileno(), 0, os.SEEK_DATA)
+            except OSError:
+                self.skipTest("filesystem has no SEEK_DATA support")
+        self.assertEqual(self.module.sha256_file(source), linear)
+        with source.open("rb", buffering=0) as stream:
+            stream.read(1)
+        # A hashing pass over the same file through a raw descriptor must
+        # touch only the data extents, never the 60 MB of holes.
+        with mock.patch.object(os, "read", counting_read):
+            self.module.sha256_file(source)
+        self.assertLess(read_bytes, 8 * 1024 * 1024)
+
     def test_restore_accounting_reports_the_object_stream_it_materialized(
         self,
     ) -> None:

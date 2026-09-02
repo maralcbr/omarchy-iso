@@ -41,6 +41,19 @@ detach_images() {
   loops=()
 }
 
+# The loop-backed images come out of a build session dense: most of their
+# free space has been written as literal zeros, so a 34 GB root image that
+# holds a few GB of files is stored, hashed, and read back as ~31 GB. Punch
+# those zero runs back into holes before the checkpoint store copies the
+# image. Content and sha256 are unchanged; only allocation changes.
+dig_image_holes() {
+  local image
+  for image in "$@"; do
+    [[ -f $image && ! -L $image ]] || fail "cannot dig holes in $image"
+    fallocate --dig-holes -- "$image"
+  done
+}
+
 attach_images() {
   local image_directory=$1
   target=$work/target

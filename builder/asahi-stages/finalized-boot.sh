@@ -81,6 +81,7 @@ run_finalized_boot_stage() {
   detach_images
   rm -f "$finalized_directory/esp-build.img"
   rm -rf "$finalized_directory/state"
+  dig_image_holes "$finalized_directory/root.img" "$finalized_directory/boot.img"
   if [[ -n ${SOURCE_DATE_EPOCH:-} ]]; then
     find "$finalized_directory/esp" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
     touch -d "@$SOURCE_DATE_EPOCH" \

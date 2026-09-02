@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -60,11 +61,65 @@ def _json_digest(value: Any) -> str:
     return hashlib.sha256(_canonical_bytes(value)).hexdigest()
 
 
+_CHUNK_BYTES = 8 * 1024 * 1024
+_ZERO_CHUNK = bytes(_CHUNK_BYTES)
+
+
 def sha256_file(path: Path) -> str:
+    """Digest a file's complete logical byte stream.
+
+    Holes count as the zero bytes a reader would see, so the result equals a
+    plain linear read. The holes are fed to the digest from a static zero
+    buffer instead of being read: a 34 GB disk image that is mostly holes
+    used to cost a full pass through the shared Docker mount for nothing.
+    Filesystems without SEEK_DATA/SEEK_HOLE fall back to the linear read.
+    """
     digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        while chunk := stream.read(8 * 1024 * 1024):
-            digest.update(chunk)
+    hashed = 0
+
+    def hash_zeros_up_to(offset: int) -> None:
+        nonlocal hashed
+        while hashed < offset:
+            span = min(_CHUNK_BYTES, offset - hashed)
+            digest.update(memoryview(_ZERO_CHUNK)[:span])
+            hashed += span
+
+    with path.open("rb", buffering=0) as stream:
+        descriptor = stream.fileno()
+        size = os.fstat(descriptor).st_size
+        position = 0
+        while position < size:
+            try:
+                data_offset = os.lseek(descriptor, position, os.SEEK_DATA)
+            except OSError as error:
+                if error.errno == errno.ENXIO:
+                    # No data beyond position: the rest of the file is a hole.
+                    break
+                # No sparse support here: hash the remainder linearly.
+                stream.seek(position)
+                while chunk := stream.read(_CHUNK_BYTES):
+                    digest.update(chunk)
+                    hashed += len(chunk)
+                position = size
+                break
+            if data_offset >= size:
+                break
+            try:
+                hole_offset = os.lseek(descriptor, data_offset, os.SEEK_HOLE)
+            except OSError:
+                hole_offset = size
+            hash_zeros_up_to(data_offset)
+            stream.seek(data_offset)
+            remaining = min(hole_offset, size) - data_offset
+            while remaining:
+                chunk = stream.read(min(_CHUNK_BYTES, remaining))
+                if not chunk:
+                    raise CheckpointError(f"unexpected EOF while hashing {path}")
+                digest.update(chunk)
+                hashed += len(chunk)
+                remaining -= len(chunk)
+            position = hole_offset
+        hash_zeros_up_to(size)
     return digest.hexdigest()
 
 

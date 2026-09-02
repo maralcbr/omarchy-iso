@@ -72,6 +72,8 @@ run_configured_target_stage() {
     .validation == {result: "passed"}' "$configured_installed_contract" \
     >/dev/null || fail "configured installed-content contract is invalid"
   detach_images
+  dig_image_holes "$configured_directory/root.img" \
+    "$configured_directory/boot.img" "$configured_directory/esp-build.img"
   store_stage configured-target "$configured_identity" \
     "$((SECONDS - configured_started))" \
     --output root-image="$configured_directory/root.img" \

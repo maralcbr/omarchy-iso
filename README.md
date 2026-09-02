@@ -33,6 +33,25 @@ Despite the local folder name, the first argument is the Omarchy source checkout
 
 Use `--dev` or `--rc` to build against those package channels. Both `--dev` and `--edge` select the dev packages from the edge mirror.
 
+### Rebuilding the Apple Silicon package without a diagnostic build
+
+A qualification build of the Apple Silicon OS package needs a verified
+builder-toolchain checkpoint in its checkpoint root, and a diagnostic build is
+what creates one. Starting a fresh `OMARCHY_ASAHI_CHECKPOINT_ROOT` for every
+release therefore costs a full diagnostic build (about 12 minutes) each time.
+Reuse the root instead and clear only the stage checkpoints:
+
+```bash
+./bin/omarchy-iso-asahi-checkpoint-reset ~/.cache/omarchy/asahi-checkpoints-20260902b
+```
+
+It keeps `builder-toolchain/`, removes `checkpoints/` and `objects/`, and runs
+under the same host lease as the build, so it refuses to run while an Apple
+build is in progress. Pass `--dry-run` first to see what it would remove.
+Qualification builds never read old stage checkpoints, so nothing is lost;
+what the reset removes is the same-identity checkpoint that would otherwise
+make the store fail closed when a rebuilt image is not byte-identical.
+
 ## Autoinstall
 
 The shipped ISO installs itself with no keyboard when it finds its configuration on a second drive. Attach a drive labeled `cidata` alongside the ISO and the installer copies the config off it and skips the configurator; with no such drive, nothing changes and the wizard runs as usual. No rebuild, no extra boot entry.
