@@ -3,7 +3,7 @@
   "product_id": "omarchy-mx-mac",
   "name": "Omarchy MX Mac",
   "default_os_name": "Omarchy",
-  "package_filename": "omarchy-2026.09.01-aarch64-apple-silicon-asahi-os-package.zip",
+  "package_filename": "omarchy-2026.09.02-aarch64-apple-silicon-asahi-os-package.zip",
   "esp_size_bytes": 524288000,
   "esp_volume_id": "0x4f4d5801",
   "boot_size_bytes": 2147483648,
