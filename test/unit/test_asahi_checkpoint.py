@@ -420,6 +420,35 @@ class AsahiCheckpointTests(unittest.TestCase):
                 self.assertIsInstance(seconds, float)
                 self.assertGreaterEqual(seconds, 0.0)
 
+    def test_copy_keeps_a_trailing_hole_sparse(self) -> None:
+        # SEEK_DATA past the last data extent fails with ENXIO. That is a
+        # trailing hole, not missing sparse support; falling back to a linear
+        # copy there wrote the whole tail of every disk image as zeros.
+        source = self.root / "trailing-hole.img"
+        with source.open("wb") as stream:
+            stream.seek(1024 * 1024)
+            stream.write(b"x" * (1024 * 1024))
+            stream.truncate(96 * 1024 * 1024)
+        with source.open("rb") as probe:
+            try:
+                os.lseek(probe.fileno(), 0, os.SEEK_DATA)
+            except OSError:
+                self.skipTest("filesystem has no SEEK_DATA support")
+        destination = self.root / "trailing-hole-copy.img"
+        real_write = os.write
+        written = 0
+
+        def counting_write(descriptor, data):
+            nonlocal written
+            written += len(data)
+            return real_write(descriptor, data)
+
+        with mock.patch.object(os, "write", counting_write):
+            streamed = self.module._copy_sparse_file(source, destination)
+        self.assertEqual(streamed, self.module.sha256_file(source))
+        self.assertEqual(destination.stat().st_size, source.stat().st_size)
+        self.assertLessEqual(destination.stat().st_blocks * 512, 4 * 1024 * 1024)
+
     def test_sha256_file_hashes_holes_without_reading_them(self) -> None:
         # The digest must cover the logical stream, holes included, exactly
         # as a linear read would; but the holes must come from the zero buffer,

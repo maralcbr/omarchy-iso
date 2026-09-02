@@ -643,7 +643,13 @@ def _copy_sparse_file(
         while position < size:
             try:
                 data_offset = os.lseek(source_stream.fileno(), position, os.SEEK_DATA)
-            except OSError:
+            except OSError as error:
+                if error.errno == errno.ENXIO:
+                    # No data beyond position: the rest of the file is one
+                    # hole. Treating this as missing sparse support used to
+                    # write the whole tail of a 34 GB disk image as literal
+                    # zeros into the object store.
+                    break
                 # No sparse support here: copy and hash the remainder linearly.
                 hash_holes_up_to(position)
                 source_stream.seek(position)
