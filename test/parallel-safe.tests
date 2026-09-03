@@ -12,3 +12,6 @@ test/unit/test_keyboard.py
 test/unit/test_offline_mirror_pruning.py
 test/unit/test_provisioning_state.py
 test/unit/test_run_manifest.py
+test/unit/architecture-selector-test.sh
+test/unit/arm-profile-test.sh
+test/unit/test_arm_limine.py
