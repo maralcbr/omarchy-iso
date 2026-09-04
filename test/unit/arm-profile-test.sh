@@ -58,7 +58,7 @@ apple_live_profile=$(
 filtered=$(printf '%s\n' linux linux-headers linux-asahi linux-asahi-headers \
   asahi-desktop-meta asahi-fwextract vulkan-asahi widevine amd-ucode tzupdate base |
   filter_target_packages)
-[[ $filtered == $'linux-aarch64\nlinux-aarch64-headers\nlinux-aarch64\nlinux-aarch64-headers\nbase' ]]
+[[ $filtered == $'linux-aarch64\nlinux-aarch64-headers\nlinux-aarch64\nlinux-aarch64-headers\ntzupdate\nbase' ]]
 
 apple_filtered=$(
   export OMARCHY_ARCH=aarch64 OMARCHY_MEDIA_TARGET=aarch64/apple-silicon
@@ -68,7 +68,7 @@ apple_filtered=$(
     limine limine-mkinitcpio-hook limine-snapper-sync snapper sof-firmware base |
     filter_target_packages
 )
-[[ $apple_filtered == $'linux-asahi\nlinux-asahi-headers\nlinux-asahi\nlinux-asahi-headers\nasahi-desktop-meta\nasahi-fwextract\nvulkan-asahi\nwidevine\ngrub\nbase' ]]
+[[ $apple_filtered == $'linux-asahi\nlinux-asahi-headers\nlinux-asahi\nlinux-asahi-headers\nasahi-desktop-meta\nasahi-fwextract\nvulkan-asahi\nwidevine\ntzupdate\ngrub\nbase' ]]
 package_stage="$ROOT/builder/asahi-stages/verified-package-cache.sh"
 grep -Fq '"${apple_keyring_names[@]}" "${apple_package_names[@]}"' \
   "$package_stage"

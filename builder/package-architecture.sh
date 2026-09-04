@@ -96,7 +96,7 @@ filter_target_packages() {
   while IFS= read -r line || [[ -n $line ]]; do
     if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon ]]; then
       case "$line" in
-        amd-ucode|intel-ucode|limine-mkinitcpio-hook|limine-snapper-sync|snapper|sof-firmware|tzupdate)
+        amd-ucode|intel-ucode|limine-mkinitcpio-hook|limine-snapper-sync|snapper|sof-firmware)
           continue
           ;;
         limine)
@@ -111,7 +111,7 @@ filter_target_packages() {
       esac
     elif [[ $OMARCHY_ARCH == aarch64 ]]; then
       case "$line" in
-        amd-ucode|asahi-desktop-meta|asahi-fwextract|intel-ucode|tzupdate|vulkan-asahi|widevine)
+        amd-ucode|asahi-desktop-meta|asahi-fwextract|intel-ucode|vulkan-asahi|widevine)
           continue
           ;;
         linux|linux-asahi)
