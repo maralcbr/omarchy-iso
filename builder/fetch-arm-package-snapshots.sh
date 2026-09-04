@@ -17,6 +17,28 @@ source "$builder_root/arm-package-snapshots.conf"
 [[ $ARM_RUNTIME_SOURCE_COMMIT =~ ^[0-9a-f]{40}$ ]]
 [[ $ARM_RUNTIME_SIGNING_FINGERPRINT =~ ^[A-F0-9]{40}$ ]]
 
+# The cached package files and the repository the installed system syncs from
+# must come from the same release. When they differ, a package built in both
+# releases has one version and two checksums, and pacman aborts the very first
+# install of it with no transaction and nothing in the log (this is what broke
+# the VS Code install on the 2026-09-04 M1 reinstall). The two tags live in
+# separate hand-edited files, so compare them here rather than trusting a
+# repoint to touch both.
+installed_pacman_conf=${INSTALLED_PACMAN_CONF:-$builder_root/../configs/airootfs/usr/share/omarchy-iso/pacman-online-installed-arm.conf}
+if [[ -r $installed_pacman_conf ]]; then
+  installed_release=$(sed -n 's#^Server = https://github.com/maralcbr/omarchy-pkgs/releases/download/##p' "$installed_pacman_conf" | head -1)
+  [[ $installed_release == "$ARM_REPOSITORY_RELEASE" ]] || {
+    echo "ERROR: the cached packages and the installed system name different releases" >&2
+    echo "       arm-package-snapshots.conf:        $ARM_REPOSITORY_RELEASE" >&2
+    echo "       pacman-online-installed-arm.conf:  ${installed_release:-<none>}" >&2
+    echo "       Point both at the same release before building." >&2
+    exit 1
+  }
+else
+  echo "ERROR: cannot read the installed pacman configuration: $installed_pacman_conf" >&2
+  exit 1
+fi
+
 repository_base="https://github.com/maralcbr/omarchy-pkgs/releases/download"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

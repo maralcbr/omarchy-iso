@@ -124,7 +124,12 @@ chmod +x "$stubs/curl" "$stubs/gpg"
 
 export TEST_REMOTE="$remote"
 export TEST_FINGERPRINT="$fingerprint"
-BUILDER_ROOT="$builder" PATH="$stubs:$PATH" \
+# The installed system must sync from the release these files come from.
+installed_conf="$work/pacman-online-installed-arm.conf"
+printf '[omarchy]\nServer = https://github.com/maralcbr/omarchy-pkgs/releases/download/%s\n' \
+  "$repository_release" >"$installed_conf"
+
+BUILDER_ROOT="$builder" INSTALLED_PACMAN_CONF="$installed_conf" PATH="$stubs:$PATH" \
   bash "$ROOT/builder/fetch-arm-package-snapshots.sh" "$destination"
 
 package_count=$(find "$destination" -maxdepth 1 -type f -name '*.pkg.tar.*' ! -name '*.sig' | wc -l)
@@ -133,7 +138,7 @@ package_count=$(find "$destination" -maxdepth 1 -type f -name '*.pkg.tar.*' ! -n
 (( $(wc -l <"$destination/ARM-PACKAGES") == 37 ))
 
 printf 'corrupted\n' >>"$remote/$repository_release/repo-pkg-01-1-1-aarch64.pkg.tar.xz"
-if BUILDER_ROOT="$builder" PATH="$stubs:$PATH" \
+if BUILDER_ROOT="$builder" INSTALLED_PACMAN_CONF="$installed_conf" PATH="$stubs:$PATH" \
   bash "$ROOT/builder/fetch-arm-package-snapshots.sh" "$work/corrupt-destination" 2>/dev/null; then
   echo "snapshot verifier accepted a corrupted package" >&2
   exit 1
@@ -141,5 +146,16 @@ fi
 
 grep -Fq 'asahi-packages-candidate-[0-9a-f]{40}' "$ROOT/builder/fetch-arm-package-snapshots.sh"
 grep -Fq 'runtime_key="$builder_root/omarchy-arm-repository.asc"' "$ROOT/builder/fetch-arm-package-snapshots.sh"
+
+# A build whose cached packages and installed repository name different
+# releases ships a system that cannot install its own cached packages.
+mismatched_conf="$work/mismatched-pacman.conf"
+printf '[omarchy]\nServer = https://github.com/maralcbr/omarchy-pkgs/releases/download/asahi-packages-stable-%s\n' \
+  "$(printf 'e%.0s' {1..40})" >"$mismatched_conf"
+if BUILDER_ROOT="$builder" INSTALLED_PACMAN_CONF="$mismatched_conf" PATH="$stubs:$PATH" \
+  bash "$ROOT/builder/fetch-arm-package-snapshots.sh" "$work/mismatched-destination" 2>/dev/null; then
+  echo "fetch accepted a release the installed system does not use" >&2
+  exit 1
+fi
 
 echo "ARM package snapshot tests passed"
