@@ -147,6 +147,35 @@ class AsahiOSPackageContentsTests(unittest.TestCase):
             ):
                 MODULE.capture(target, NODE_IDENTITY)
 
+    def test_guarded_dmi_probe_is_fail_safe_and_bare_one_is_not(self) -> None:
+        grub = (
+            "menuentry 'Omarchy' {\n"
+            "  linux /vmlinuz-linux-asahi "
+            f"root=UUID={ROOT_UUID} rootflags=subvol=@ rw rootfstype=btrfs\n"
+            "  initrd /initramfs-linux-asahi.img\n"
+            "}\n"
+        ).encode()
+        probe = "usr/share/omarchy/install/hardware/apple/fix-spi-keyboard.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            _write_complete_target(target, grub)
+            (target / probe).write_bytes(
+                b"if product_name=$(cat /sys/class/dmi/id/product_name 2>/dev/null); then\n"
+                b"  product_name=${product_name:-}\n"
+                b"else\n"
+                b'  product_name=""\n'
+                b"fi\n"
+            )
+            MODULE.capture(target, NODE_IDENTITY)
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            _write_complete_target(target, grub)
+            (target / probe).write_bytes(
+                b'product_name="$(cat /sys/class/dmi/id/product_name 2>/dev/null)"\n'
+            )
+            with self.assertRaisesRegex(MODULE.ContentEvidenceError, "not fail-safe"):
+                MODULE.capture(target, NODE_IDENTITY)
+
     def test_missing_boot_artifact_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(

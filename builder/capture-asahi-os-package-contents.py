@@ -199,11 +199,13 @@ def capture(target: Path, node_identity: dict) -> dict:
         target,
         ARTIFACTS["root_legacy_apple_probe"],
     ).read_text(encoding="utf-8", errors="strict")
-    if (
-        'product_name="$(cat /sys/class/dmi/id/product_name '
-        '2>/dev/null || true)"'
-        not in legacy_probe
-    ):
+    # Either the repaired bare assignment or the guarded read newer runtimes
+    # ship; both survive a missing DMI node under set -e.
+    fail_safe_forms = (
+        'product_name="$(cat /sys/class/dmi/id/product_name 2>/dev/null || true)"',
+        "if product_name=$(cat /sys/class/dmi/id/product_name 2>/dev/null); then",
+    )
+    if not any(form in legacy_probe for form in fail_safe_forms):
         raise ContentEvidenceError("legacy Apple DMI probe is not fail-safe")
 
     locale = _target_file(
