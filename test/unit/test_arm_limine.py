@@ -298,6 +298,29 @@ class ArmLimineTest(unittest.TestCase):
 
             self.assertIn("2>/dev/null || true", leaf.read_text())
 
+    def test_asahi_target_setup_leaves_a_guarded_dmi_probe_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            leaf = target / "usr/share/omarchy/install/hardware/apple/fix-spi-keyboard.sh"
+            leaf.parent.mkdir(parents=True)
+            guarded = (
+                "if product_name=$(cat /sys/class/dmi/id/product_name 2>/dev/null); then\n"
+                "  product_name=${product_name:-}\n"
+                "else\n"
+                '  product_name=""\n'
+                "fi\n"
+            )
+            leaf.write_text(guarded)
+            ctx = SimpleNamespace(
+                target=target,
+                is_protected=True,
+                omarchy_install={"boot": {"backend": "asahi-grub"}},
+            )
+
+            phases_impl._repair_legacy_apple_dmi_probe(ctx)
+
+            self.assertEqual(leaf.read_text(), guarded)
+
     def test_asahi_package_does_not_stage_limine_hibernation_state(self) -> None:
         ctx = SimpleNamespace(
             is_protected=True,

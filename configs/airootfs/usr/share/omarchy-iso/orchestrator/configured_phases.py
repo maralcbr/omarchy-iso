@@ -1307,8 +1307,13 @@ def _repair_legacy_apple_dmi_probe(ctx: InstallContext) -> None:
     repaired = (
         'product_name="$(cat /sys/class/dmi/id/product_name 2>/dev/null || true)"'
     )
+    # Newer runtimes guard the probe themselves and never carry the bare
+    # assignment; there is nothing to repair in that form.
+    guarded = "if product_name=$(cat /sys/class/dmi/id/product_name 2>/dev/null); then"
     contents = leaf.read_text()
     if contents.count(repaired) == 1 and original not in contents:
+        return
+    if contents.count(guarded) == 1 and original not in contents and repaired not in contents:
         return
     if contents.count(original) != 1 or repaired in contents:
         raise RuntimeError("installed legacy Apple hardware probe changed")
