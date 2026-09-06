@@ -171,9 +171,29 @@ class ArmLimineTest(unittest.TestCase):
                 phases_impl.finalize_boot(ctx)
 
             self.assertEqual((target / "boot/vmlinuz-linux-asahi").read_bytes(), b"kernel")
+            dropin = (target / "etc/mkinitcpio.conf.d/90-omarchy-asahi.conf").read_text()
+            self.assertIn("asahi omarchy-vendorfw", dropin)
+            # The systemd initrd never runs the asahi hook's busybox runscripts,
+            # so the vendor firmware needs a systemd unit of its own.
+            hook = target / "etc/initcpio/install/omarchy-vendorfw"
+            self.assertTrue(hook.is_file())
+            self.assertTrue(hook.stat().st_mode & 0o111)
             self.assertIn(
-                "asahi",
-                (target / "etc/mkinitcpio.conf.d/90-omarchy-asahi.conf").read_text(),
+                "initrd.target.wants/omarchy-vendorfw.service", hook.read_text()
+            )
+            script = target / "usr/lib/omarchy/initcpio/omarchy-vendorfw.sh"
+            self.assertTrue(script.stat().st_mode & 0o111)
+            self.assertIn("asahi,efi-system-partition", script.read_text())
+            self.assertIn("firmware.cpio", script.read_text())
+            self.assertIn("/sysroot/lib/firmware/vendor", script.read_text())
+            unit = (target / "usr/lib/omarchy/initcpio/omarchy-vendorfw.service").read_text()
+            self.assertIn("Before=initrd-fs.target initrd-switch-root.target", unit)
+            self.assertIn("DefaultDependencies=no", unit)
+            # "quiet" after loglevel=3 resets the console loglevel to 4 and let
+            # driver errors print over the first-boot setup screen.
+            self.assertIn(
+                'GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3 splash"',
+                (target / "etc/default/grub").read_text(),
             )
             self.assertIn(
                 'GRUB_DISTRIBUTOR="Omarchy"',

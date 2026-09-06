@@ -409,6 +409,9 @@ def run_chroot_finalizer(ctx: InstallContext) -> None:
 # firmware, so both must be reloaded afterwards. Reloading only brcmfmac left
 # the first boot after an install with working Wi-Fi and dead Bluetooth:
 # hci_bcm4377 had already failed with "Unable to load firmware" at ~4.5 s.
+# The reload is skipped when the initrd already mounted /lib/firmware/vendor
+# (omarchy-vendorfw hook): reloading a healthy brcmfmac crashed the BCM4388
+# dongle on the M2 Max and left it unable to complete DHCP.
 VENDOR_FIRMWARE_UNIT = """\
 [Unit]
 Description=Install Apple vendor firmware into /lib/firmware
@@ -419,7 +422,7 @@ ConditionPathExists=/boot/efi/vendorfw/firmware.tar
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/sh -c 'set -e; src=/boot/efi/vendorfw/firmware.tar; stamp=/var/lib/omarchy/vendor-firmware.stamp; if [ ! -f "$stamp" ] || [ "$src" -nt "$stamp" ]; then install -d -m 0755 /lib/firmware /var/lib/omarchy; tar -xf "$src" -C /lib/firmware; touch -r "$src" "$stamp"; fi'
-ExecStartPost=-/usr/bin/sh -c 'for m in brcmfmac hci_bcm4377; do modprobe -r "$m" 2>/dev/null || true; modprobe "$m" 2>/dev/null || true; done'
+ExecStartPost=-/usr/bin/sh -c 'mountpoint -q /lib/firmware/vendor && exit 0; for m in brcmfmac hci_bcm4377; do modprobe -r "$m" 2>/dev/null || true; modprobe "$m" 2>/dev/null || true; done'
 
 [Install]
 WantedBy=multi-user.target

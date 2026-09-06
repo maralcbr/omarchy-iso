@@ -103,6 +103,9 @@ class AsahiOrchestratorStageTests(unittest.TestCase):
         self.assertEqual(len(post), 1, "expected exactly one ExecStartPost")
         for module in ("brcmfmac", "hci_bcm4377"):
             self.assertIn(module, post[0], f"{module} is never reloaded")
+        # Reloading a healthy brcmfmac crashed the BCM4388 dongle on the
+        # M2 Max; skip the reload when the initrd already provided the firmware.
+        self.assertIn("mountpoint -q /lib/firmware/vendor && exit 0", post[0])
 
     def test_finalized_stage_enables_apple_platform_services(self) -> None:
         """Speaker safety must be enabled in the image.

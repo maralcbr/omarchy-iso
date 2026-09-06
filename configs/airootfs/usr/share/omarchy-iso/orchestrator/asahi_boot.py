@@ -20,17 +20,93 @@ for _omarchy_asahi_hook in "${HOOKS[@]}"; do
     _omarchy_asahi_added=true
   fi
   if [[ $_omarchy_asahi_hook == filesystems && $_omarchy_asahi_added == false ]]; then
-    _omarchy_asahi_hooks+=(asahi)
+    _omarchy_asahi_hooks+=(asahi omarchy-vendorfw)
     _omarchy_asahi_added=true
   fi
   _omarchy_asahi_hooks+=("$_omarchy_asahi_hook")
 done
 if [[ $_omarchy_asahi_added == false ]]; then
-  _omarchy_asahi_hooks+=(asahi)
+  _omarchy_asahi_hooks+=(asahi omarchy-vendorfw)
 fi
 HOOKS=("${_omarchy_asahi_hooks[@]}")
 unset _omarchy_asahi_hooks _omarchy_asahi_hook _omarchy_asahi_added
 '''
+
+
+# The initramfs boots with the systemd hook, which never runs the busybox
+# run_earlyhook/run_latehook scripts the asahi hook relies on to unpack the
+# vendor firmware from the ESP. Without it the wireless, Bluetooth and
+# trackpad drivers probe with no firmware and the late userspace reload
+# crashed the Wi-Fi dongle on the M2 Max. This unit does the same work inside
+# the systemd initrd, before the real root's udev coldplug.
+VENDORFW_INITCPIO_SCRIPT = r"""#!/usr/bin/sh
+set -eu
+dt=/proc/device-tree/chosen/asahi,efi-system-partition
+[ -e "$dt" ] || exit 0
+esp=$(tr -d '\0' <"$dt")
+[ -n "$esp" ] || exit 0
+mnt=/run/omarchy-vendorfw-esp
+mkdir -p "$mnt"
+mount -o ro "PARTUUID=$esp" "$mnt"
+if [ -f "$mnt/vendorfw/firmware.cpio" ]; then
+    (cd / && cpio -i <"$mnt/vendorfw/firmware.cpio")
+fi
+umount "$mnt"
+[ -d /vendorfw ] || exit 0
+dst=/sysroot/lib/firmware/vendor
+mkdir -p "$dst"
+mount -t tmpfs -o mode=0755 vendorfw "$dst"
+cp -r /vendorfw/. "$dst"/
+"""
+
+VENDORFW_INITCPIO_UNIT = """\
+[Unit]
+Description=Load Apple vendor firmware from the EFI system partition
+DefaultDependencies=no
+ConditionPathExists=/proc/device-tree/chosen/asahi,efi-system-partition
+After=sysroot.mount
+Before=initrd-fs.target initrd-switch-root.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/omarchy/initcpio/omarchy-vendorfw.sh
+"""
+
+VENDORFW_INITCPIO_INSTALL_HOOK = r"""#!/bin/bash
+# SPDX-License-Identifier: MIT
+
+build() {
+    add_binary tr
+    add_binary cpio
+    add_file /usr/lib/omarchy/initcpio/omarchy-vendorfw.sh
+    add_file /usr/lib/omarchy/initcpio/omarchy-vendorfw.service \
+        /usr/lib/systemd/system/omarchy-vendorfw.service 644
+    add_symlink /usr/lib/systemd/system/initrd.target.wants/omarchy-vendorfw.service \
+        ../omarchy-vendorfw.service
+    add_dir /lib/firmware
+    add_symlink /lib/firmware/vendor /vendorfw
+}
+
+help() {
+    cat <<HELPEOF
+Systemd-initrd counterpart of the asahi hook's early/late runscripts: unpacks
+the vendor firmware from the ESP and copies it to /lib/firmware/vendor of the
+root filesystem before udev probes the wireless, Bluetooth and input drivers.
+HELPEOF
+}
+"""
+
+
+def _install_vendorfw_initcpio_hook(target: Path) -> None:
+    files = (
+        (target / "usr/lib/omarchy/initcpio/omarchy-vendorfw.sh", VENDORFW_INITCPIO_SCRIPT, 0o755),
+        (target / "usr/lib/omarchy/initcpio/omarchy-vendorfw.service", VENDORFW_INITCPIO_UNIT, 0o644),
+        (target / "etc/initcpio/install/omarchy-vendorfw", VENDORFW_INITCPIO_INSTALL_HOOK, 0o755),
+    )
+    for path, content, mode in files:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        path.chmod(mode)
 
 
 def _set_shell_assignment(text: str, name: str, value: str) -> str:
@@ -97,6 +173,7 @@ def _prepare_asahi_kernel_and_initramfs(
     hooks = ctx.target / "etc/mkinitcpio.conf.d/90-omarchy-asahi.conf"
     hooks.parent.mkdir(parents=True, exist_ok=True)
     hooks.write_text(ASAHI_MKINITCPIO_HOOKS_DROPIN)
+    _install_vendorfw_initcpio_hook(ctx.target)
 
     shared.subprocess.run(
         ["arch-chroot", str(ctx.target), "mkinitcpio", "-P"],
@@ -117,7 +194,7 @@ def _configure_asahi_grub_defaults(ctx: InstallContext) -> Path:
         ("GRUB_TIMEOUT", "3"),
         ("GRUB_TIMEOUT_STYLE", "menu"),
         ("GRUB_CMDLINE_LINUX", "zswap.enabled=0 rootfstype=btrfs"),
-        ("GRUB_CMDLINE_LINUX_DEFAULT", "loglevel=3 quiet splash"),
+        ("GRUB_CMDLINE_LINUX_DEFAULT", "quiet loglevel=3 splash"),
     ):
         text = _set_shell_assignment(text, name, value)
     grub_default.write_text(text)
