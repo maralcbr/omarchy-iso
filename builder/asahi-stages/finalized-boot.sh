@@ -52,6 +52,12 @@ run_finalized_boot_stage() {
   printf '%s\n' 'schema_version=1' 'product_id=omarchy-mx-mac' \
     'mode=installed-full-os' >"$target/usr/share/omarchy/apple-silicon-full-os"
   chmod 0644 "$target/usr/share/omarchy/apple-silicon-full-os"
+  # Everything on the installed system that names a kernel reads this and
+  # defaults to linux-asahi when it is absent, so an Asahi install writes none.
+  if [[ $kernel_package != linux-asahi ]]; then
+    printf '%s\n' "$kernel_package" >"$target/usr/share/omarchy/apple-silicon-kernel"
+    chmod 0644 "$target/usr/share/omarchy/apple-silicon-kernel"
+  fi
   if [[ -f $target/etc/pacman.conf ]]; then
     sed -i '/^DisableSandbox$/d' "$target/etc/pacman.conf"
   fi
@@ -71,7 +77,7 @@ run_finalized_boot_stage() {
   fstrim "$target" >/dev/null 2>&1 || true
   fstrim "$target/boot" >/dev/null 2>&1 || true
   python3 /builder/capture-asahi-os-package-contents.py \
-    "$target" "$node_runtime_identity" \
+    "$target" "$node_runtime_identity" "$kernel_package" \
     >"$finalized_directory/installed-contents.json"
   python3 /builder/verify-asahi-installed-system.py \
     --root-tree "$target" --boot-tree "$target/boot" \

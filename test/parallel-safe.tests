@@ -8,6 +8,7 @@ test/unit/apple-platform-fetch-test.sh
 test/unit/apple-platform-keyring-test.sh
 test/unit/apple-platform-snapshot-test.sh
 test/unit/architecture-selector-test.sh
+test/unit/aurora-product-test.sh
 test/unit/arm-acceptance-host-test.sh
 test/unit/arm-package-snapshots-test.sh
 test/unit/arm-profile-test.sh

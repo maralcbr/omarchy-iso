@@ -48,6 +48,14 @@ while [[ $# -gt 0 ]]; do
     OMARCHY_MEDIA_TARGET="${1#*=}"
     shift
     ;;
+  --product)
+    OMARCHY_ASAHI_PRODUCT_NAME="${2:-}"
+    shift 2
+    ;;
+  --product=*)
+    OMARCHY_ASAHI_PRODUCT_NAME="${1#*=}"
+    shift
+    ;;
   --artifact)
     OMARCHY_ARTIFACT_KIND="${2:-}"
     shift 2
@@ -133,12 +141,19 @@ while [[ $# -gt 0 ]]; do
     ;;
   *)
     echo "Unknown option: $1"
-    echo "Usage: $0 [--arch x86_64|aarch64] [--target x86_64/pc|aarch64/generic|aarch64/apple-silicon] [--artifact iso|asahi-os-package] [--mode qualification|diagnostic] [--checkpoint-policy read-write|write-only] [--require-cache-hit-through configured-target] [--apple-media-validation-build] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>]"
+    echo "Usage: $0 [--arch x86_64|aarch64] [--target x86_64/pc|aarch64/generic|aarch64/apple-silicon] [--artifact iso|asahi-os-package] [--product omarchy-mx-mac|omarchy-mx-mac-aurora] [--mode qualification|diagnostic] [--checkpoint-policy read-write|write-only] [--require-cache-hit-through configured-target] [--apple-media-validation-build] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>]"
     exit 1
     ;;
   esac
 done
 
+case "${OMARCHY_ASAHI_PRODUCT_NAME:-omarchy-mx-mac}" in
+  omarchy-mx-mac|omarchy-mx-mac-aurora) ;;
+  *)
+    echo "Unsupported product: $OMARCHY_ASAHI_PRODUCT_NAME" >&2
+    exit 1
+    ;;
+esac
 case "$OMARCHY_BUILD_MODE" in
   qualification|diagnostic) ;;
   *)
@@ -750,7 +765,7 @@ DOCKER_ARGS=(
   -e "OMARCHY_ARCH=$OMARCHY_ARCH"
   -e "OMARCHY_MEDIA_TARGET=$OMARCHY_MEDIA_TARGET"
   -e "OMARCHY_ARTIFACT_KIND=$OMARCHY_ARTIFACT_KIND"
-  -e "OMARCHY_ASAHI_PRODUCT=/builder/products/omarchy-mx-mac.json"
+  -e "OMARCHY_ASAHI_PRODUCT=/builder/products/${OMARCHY_ASAHI_PRODUCT_NAME:-omarchy-mx-mac}.json"
   -e "OMARCHY_APPLE_MEDIA_BUILD_PROBE=$OMARCHY_APPLE_MEDIA_BUILD_PROBE"
   -e "OMARCHY_BUILD_IMAGE=$BUILD_IMAGE"
   -e "OMARCHY_ISO_SOURCE_COMMIT=$OMARCHY_ISO_SOURCE_COMMIT"
@@ -875,7 +890,7 @@ if [[ $OMARCHY_ARTIFACT_KIND == "asahi-os-package" ]]; then
     exit 0
   fi
   package_filename=$(jq -er '.package_filename' \
-    "$BUILD_INPUT_ROOT/builder/products/omarchy-mx-mac.json")
+    "$BUILD_INPUT_ROOT/builder/products/${OMARCHY_ASAHI_PRODUCT_NAME:-omarchy-mx-mac}.json")
   [[ $package_filename == "${package_filename##*/}" && \
     $package_filename == *.zip ]] || {
     echo "Unsafe product package filename: $package_filename" >&2

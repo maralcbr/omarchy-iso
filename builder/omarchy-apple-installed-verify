@@ -60,7 +60,18 @@ root_mount=$(mount_record "${root:-/}" btrfs root)
 boot_mount=$(mount_record "$root/boot" ext4 boot)
 esp_mount=$(mount_record "$root/boot/efi" vfat ESP)
 
-linux_package=$(pacman -Q linux-asahi 2>/dev/null) || fail "linux-asahi package is unavailable"
+# An Aurora install records its kernel here; an Asahi install writes no such
+# file, so the default is the kernel this checker has always expected.
+kernel_package=linux-asahi
+kernel_marker="$root/usr/share/omarchy/apple-silicon-kernel"
+if [[ -f $kernel_marker && ! -L $kernel_marker ]]; then
+  kernel_package=$(<"$kernel_marker")
+  kernel_package=${kernel_package//[[:space:]]/}
+fi
+[[ $kernel_package == linux-asahi || $kernel_package == linux-aurora ]] ||
+  fail "unsupported kernel package: $kernel_package"
+linux_package=$(pacman -Q "$kernel_package" 2>/dev/null) ||
+  fail "$kernel_package package is unavailable"
 [[ -s $root/usr/bin/omarchy && ! -L $root/usr/bin/omarchy ]] ||
   fail "Omarchy runtime is unavailable"
 
@@ -68,8 +79,8 @@ required_artifacts=(
   boot/efi/m1n1/boot.bin
   boot/efi/EFI/BOOT/BOOTAA64.EFI
   boot/grub/grub.cfg
-  boot/vmlinuz-linux-asahi
-  boot/initramfs-linux-asahi.img
+  "boot/vmlinuz-$kernel_package"
+  "boot/initramfs-$kernel_package.img"
 )
 artifacts_json='{}'
 for relative in "${required_artifacts[@]}"; do
@@ -86,7 +97,8 @@ for relative in "${required_artifacts[@]}"; do
     <<<"$artifacts_json")
 done
 grep -Fq 'Omarchy' "$root/boot/grub/grub.cfg" || fail "GRUB configuration is not branded"
-grep -Fq 'linux-asahi' "$root/boot/grub/grub.cfg" || fail "GRUB configuration lacks linux-asahi"
+grep -Fq "$kernel_package" "$root/boot/grub/grub.cfg" ||
+  fail "GRUB configuration lacks $kernel_package"
 
 apfs_partition_count=0
 apfs_recovery_partition_count=0
@@ -106,6 +118,7 @@ jq -n \
   --arg architecture "$architecture" \
   --arg release "$kernel_release" \
   --arg package "$linux_package" \
+  --arg kernel_package "$kernel_package" \
   --argjson root_mount "$root_mount" \
   --argjson boot_mount "$boot_mount" \
   --argjson esp_mount "$esp_mount" \
@@ -120,7 +133,7 @@ jq -n \
     kernel: {
       architecture: $architecture,
       release: $release,
-      package: "linux-asahi",
+      package: $kernel_package,
       package_record: $package
     },
     filesystems: {root: $root_mount, boot: $boot_mount, esp: $esp_mount},

@@ -26,10 +26,10 @@ CONFIGURED_PHASES = (
 REQUIRED_PLATFORM_PACKAGES = {
     "base",
     "grub",
-    "linux-asahi",
     "mkinitcpio",
     "systemd",
 }
+SUPPORTED_KERNEL_PACKAGES = {"linux-asahi", "linux-aurora"}
 
 
 class ConfiguredTargetError(RuntimeError):
@@ -191,8 +191,11 @@ def verify_product_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "root_filesystem_uuid",
     }:
         raise ConfiguredTargetError("configured product inputs are invalid")
-    if inputs["boot_backend"] != "asahi-grub" or inputs["kernel_package"] != "linux-asahi":
-        raise ConfiguredTargetError("configured product is not the supported Asahi target")
+    if (
+        inputs["boot_backend"] != "asahi-grub"
+        or inputs["kernel_package"] not in SUPPORTED_KERNEL_PACKAGES
+    ):
+        raise ConfiguredTargetError("configured product is not a supported Apple Silicon target")
     return inputs
 
 
@@ -506,7 +509,7 @@ def capture_configured_target(
                 f"installed package is absent or differs from verified repository: {name}"
             )
     runtime_files = _runtime_files_by_path(runtime_root, runtime_manifest)
-    required_packages = REQUIRED_PLATFORM_PACKAGES | _package_targets(
+    required_packages = REQUIRED_PLATFORM_PACKAGES | {product["kernel_package"]} | _package_targets(
         runtime_files["package-targets"]
     ) | _package_list(runtime_files["omarchy-base.packages"])
     for name in sorted(required_packages):

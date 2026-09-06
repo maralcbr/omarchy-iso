@@ -24,12 +24,14 @@ NODE_IDENTITY = {
 }
 
 
-def _write_complete_target(target: Path, grub_config: bytes) -> None:
+def _write_complete_target(
+    target: Path, grub_config: bytes, kernel: str = "linux-asahi"
+) -> None:
     files = {
         "boot/efi/m1n1/boot.bin": b"m1n1",
         "boot/efi/EFI/BOOT/BOOTAA64.EFI": b"grub",
-        "boot/vmlinuz-linux-asahi": b"kernel",
-        "boot/initramfs-linux-asahi.img": b"initramfs",
+        f"boot/vmlinuz-{kernel}": b"kernel",
+        f"boot/initramfs-{kernel}.img": b"initramfs",
         "boot/grub/grub.cfg": grub_config,
         "usr/bin/omarchy": b"#!/bin/sh\n",
         "usr/bin/omarchy-provision-owner": b"#!/bin/sh\n",
@@ -52,7 +54,7 @@ def _write_complete_target(target: Path, grub_config: bytes) -> None:
         "etc/systemd/system/omarchy-provision-owner.service": b"[Service]\n",
         "var/lib/omarchy/provisioning/pending": b"",
         "var/lib/omarchy/provisioning/packages/node-v1-linux-arm64.tar.gz": b"node",
-        "usr/lib/modules/7.1.6-asahi/pkgbase": b"linux-asahi\n",
+        f"usr/lib/modules/7.1.6-asahi/pkgbase": kernel.encode() + b"\n",
         "usr/lib/modules/7.1.6-asahi/vmlinuz": b"kernel",
         "var/lib/pacman/local/omarchy-1/desc": b"%NAME%\nomarchy\n",
     }
@@ -69,6 +71,50 @@ def _write_complete_target(target: Path, grub_config: bytes) -> None:
 
 
 class AsahiOSPackageContentsTests(unittest.TestCase):
+    def test_aurora_kernel_target_emits_evidence_naming_that_kernel(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            _write_complete_target(
+                target,
+                (
+                    "menuentry 'Omarchy' {\n"
+                    "  linux /vmlinuz-linux-aurora "
+                    f"root=UUID={ROOT_UUID} rootflags=subvol=@ rw rootfstype=btrfs\n"
+                    "  initrd /initramfs-linux-aurora.img\n"
+                    "}\n"
+                ).encode(),
+                kernel="linux-aurora",
+            )
+
+            evidence = MODULE.capture(target, NODE_IDENTITY, "linux-aurora")
+
+            self.assertEqual(evidence["kernel"]["package"], "linux-aurora")
+            self.assertEqual(
+                evidence["artifacts"]["boot_kernel"]["path"],
+                "/boot/vmlinuz-linux-aurora",
+            )
+            self.assertEqual(
+                evidence["artifacts"]["boot_initramfs"]["path"],
+                "/boot/initramfs-linux-aurora.img",
+            )
+
+    def test_kernel_the_target_does_not_carry_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            _write_complete_target(
+                target,
+                (
+                    "menuentry 'Omarchy' {\n"
+                    "  linux /vmlinuz-linux-asahi "
+                    f"root=UUID={ROOT_UUID} rootflags=subvol=@ rw rootfstype=btrfs\n"
+                    "  initrd /initramfs-linux-asahi.img\n"
+                    "}\n"
+                ).encode(),
+            )
+
+            with self.assertRaises(MODULE.ContentEvidenceError):
+                MODULE.capture(target, NODE_IDENTITY, "linux-aurora")
+
     def test_complete_target_emits_boot_root_and_provisioning_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp)
@@ -83,7 +129,7 @@ class AsahiOSPackageContentsTests(unittest.TestCase):
                 ).encode(),
             )
 
-            evidence = MODULE.capture(target, NODE_IDENTITY)
+            evidence = MODULE.capture(target, NODE_IDENTITY, "linux-asahi")
 
             self.assertEqual(evidence["content_kind"], "asahi-full-os-images")
             self.assertEqual(evidence["kernel"]["package"], "linux-asahi")
@@ -145,7 +191,7 @@ class AsahiOSPackageContentsTests(unittest.TestCase):
                 MODULE.ContentEvidenceError,
                 "GRUB Linux root selector does not match installed root UUID",
             ):
-                MODULE.capture(target, NODE_IDENTITY)
+                MODULE.capture(target, NODE_IDENTITY, "linux-asahi")
 
     def test_guarded_dmi_probe_is_fail_safe_and_bare_one_is_not(self) -> None:
         grub = (
@@ -166,7 +212,7 @@ class AsahiOSPackageContentsTests(unittest.TestCase):
                 b'  product_name=""\n'
                 b"fi\n"
             )
-            MODULE.capture(target, NODE_IDENTITY)
+            MODULE.capture(target, NODE_IDENTITY, "linux-asahi")
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp)
             _write_complete_target(target, grub)
@@ -174,7 +220,7 @@ class AsahiOSPackageContentsTests(unittest.TestCase):
                 b'product_name="$(cat /sys/class/dmi/id/product_name 2>/dev/null)"\n'
             )
             with self.assertRaisesRegex(MODULE.ContentEvidenceError, "not fail-safe"):
-                MODULE.capture(target, NODE_IDENTITY)
+                MODULE.capture(target, NODE_IDENTITY, "linux-asahi")
 
     def test_missing_boot_artifact_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -182,7 +228,7 @@ class AsahiOSPackageContentsTests(unittest.TestCase):
                 MODULE.ContentEvidenceError,
                 "missing installed artifact",
             ):
-                MODULE.capture(Path(tmp), NODE_IDENTITY)
+                MODULE.capture(Path(tmp), NODE_IDENTITY, "linux-asahi")
 
     def test_installed_node_must_match_exact_lock_projection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -202,7 +248,7 @@ class AsahiOSPackageContentsTests(unittest.TestCase):
                 MODULE.ContentEvidenceError,
                 "installed Node archive differs from the pinned lock",
             ):
-                MODULE.capture(target, stale_identity)
+                MODULE.capture(target, stale_identity, "linux-asahi")
 
     def test_installed_node_filename_and_size_must_match_lock_projection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -223,7 +269,7 @@ class AsahiOSPackageContentsTests(unittest.TestCase):
             ):
                 with self.subTest(identity=changed_identity):
                     with self.assertRaises(MODULE.ContentEvidenceError):
-                        MODULE.capture(target, changed_identity)
+                        MODULE.capture(target, changed_identity, "linux-asahi")
 
     def test_extra_node_archive_of_any_name_or_architecture_is_rejected(self) -> None:
         for extra_name in (
@@ -248,7 +294,7 @@ class AsahiOSPackageContentsTests(unittest.TestCase):
                     MODULE.ContentEvidenceError,
                     "Node archive inventory is not exact",
                 ):
-                    MODULE.capture(target, NODE_IDENTITY)
+                    MODULE.capture(target, NODE_IDENTITY, "linux-asahi")
 
 
 if __name__ == "__main__":

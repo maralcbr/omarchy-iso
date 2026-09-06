@@ -73,13 +73,19 @@ package_stage="$ROOT/builder/asahi-stages/verified-package-cache.sh"
 grep -Fq '"${apple_keyring_names[@]}" "${apple_package_names[@]}"' \
   "$package_stage"
 for package in alsa-ucm-conf-asahi asahi-audio asahi-bless asahi-fwextract \
-  asahi-scripts grub linux-asahi linux-asahi-headers m1n1 speakersafetyd \
-  startup-disk uboot-asahi; do
+  asahi-scripts grub m1n1 speakersafetyd startup-disk uboot-asahi; do
   grep -Eq "[[:space:]]${package}([[:space:]\\\\]|$)" "$package_stage" || {
     echo "Apple target transaction does not explicitly select $package" >&2
     exit 1
   }
 done
+# The kernel is named by the product rather than written out, so the payload
+# can carry the Aurora kernel instead. It still defaults to the Asahi one.
+grep -Fq '"${ASAHI_KERNEL_PACKAGE:-linux-asahi}" "${ASAHI_KERNEL_PACKAGE:-linux-asahi}-headers"' \
+  "$package_stage" || {
+  echo "Apple target transaction does not select the product kernel" >&2
+  exit 1
+}
 grep -Fq 'alsa-ucm-conf-asahi asahi-alarm-keyring' "$package_stage"
 
 profile="$work/profile"

@@ -73,9 +73,17 @@ checkpoint_verified_package_cache() {
     exit 1
   }
 
+  local aurora_locks=()
+  if [[ ${ASAHI_KERNEL_PACKAGE:-linux-asahi} == linux-aurora ]]; then
+    aurora_locks=(
+      --snapshot-lock aurora-packages=/builder/aurora-package-snapshots.conf
+      --snapshot-lock aurora-list="$offline_mirror_dir/AURORA-PACKAGES"
+    )
+  fi
   python3 /builder/capture-asahi-offline-repository.py \
     --mirror "$offline_mirror_dir" \
     --requested-list "$requested_package_files" \
+    "${aurora_locks[@]}" \
     --snapshot-lock package-source-lock="$package_cache_stage_root/source-lock.json" \
     --snapshot-lock arm-snapshot=/builder/arm-package-snapshots.conf \
     --snapshot-lock apple-platform=/builder/apple-platform-snapshot.json \

@@ -132,6 +132,14 @@ prepare_verified_package_snapshots_and_trust() {
       mapfile -t apple_package_names <"$offline_mirror_dir/APPLE-PACKAGES"
       snapshot_package_names+=("${apple_keyring_names[@]}")
       snapshot_package_names+=("${apple_package_names[@]}")
+      if [[ ${ASAHI_KERNEL_PACKAGE:-linux-asahi} == linux-aurora ]]; then
+        source /builder/aurora-package-snapshots.conf
+        bash /builder/fetch-aurora-package-snapshot.sh "$offline_mirror_dir"
+        mapfile -t aurora_package_names <"$offline_mirror_dir/AURORA-PACKAGES"
+        (( ${#aurora_package_names[@]} == AURORA_REPOSITORY_PACKAGE_COUNT ))
+        snapshot_package_names+=("${aurora_package_names[@]}")
+        aurora_package_count=$AURORA_REPOSITORY_PACKAGE_COUNT
+      fi
     fi
     snapshot_packages=()
     for snapshot_package_name in "${snapshot_package_names[@]}"; do
@@ -141,7 +149,8 @@ prepare_verified_package_snapshots_and_trust() {
       apple_platform_package_count=$(jq -r '.packages | length' \
         "$OMARCHY_APPLE_PLATFORM_SNAPSHOT")
       (( ${#snapshot_packages[@]} ==
-        ARM_REPOSITORY_PACKAGE_COUNT + 7 + apple_platform_package_count ))
+        ARM_REPOSITORY_PACKAGE_COUNT + 7 + apple_platform_package_count +
+        ${aurora_package_count:-0} ))
     else
       (( ${#snapshot_packages[@]} == ARM_REPOSITORY_PACKAGE_COUNT + 6 ))
     fi
@@ -301,7 +310,7 @@ prepare_verified_package_cache() {
     printf '%s\n' archlinuxarm-keyring >>"$shipped_base_packages"
   fi
   if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon ]]; then
-    printf '%s\n' alsa-ucm-conf-asahi asahi-alarm-keyring asahi-audio asahi-bless asahi-fwextract asahi-scripts grub linux-asahi linux-asahi-headers m1n1 speakersafetyd startup-disk uboot-asahi >>"$shipped_base_packages"
+    printf '%s\n' alsa-ucm-conf-asahi asahi-alarm-keyring asahi-audio asahi-bless asahi-fwextract asahi-scripts grub "${ASAHI_KERNEL_PACKAGE:-linux-asahi}" "${ASAHI_KERNEL_PACKAGE:-linux-asahi}-headers" m1n1 speakersafetyd startup-disk uboot-asahi >>"$shipped_base_packages"
     sort -u -o "$shipped_base_packages" "$shipped_base_packages"
   fi
   base_pkg_lists=("$shipped_base_packages" "$shipped_other_packages")

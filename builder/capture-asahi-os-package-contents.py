@@ -16,11 +16,13 @@ class ContentEvidenceError(RuntimeError):
     pass
 
 
+SUPPORTED_KERNEL_PACKAGES = ("linux-asahi", "linux-aurora")
+
 ARTIFACTS = {
     "esp_m1n1": "boot/efi/m1n1/boot.bin",
     "esp_bootaa64": "boot/efi/EFI/BOOT/BOOTAA64.EFI",
-    "boot_kernel": "boot/vmlinuz-linux-asahi",
-    "boot_initramfs": "boot/initramfs-linux-asahi.img",
+    "boot_kernel": "boot/vmlinuz-{kernel}",
+    "boot_initramfs": "boot/initramfs-{kernel}.img",
     "boot_grub_config": "boot/grub/grub.cfg",
     "root_omarchy": "usr/bin/omarchy",
     "root_provision_owner": "usr/bin/omarchy-provision-owner",
@@ -157,7 +159,13 @@ def _expected_node(identity: dict) -> dict:
     }
 
 
-def capture(target: Path, node_identity: dict) -> dict:
+def _artifacts_for(kernel: str) -> dict:
+    return {
+        name: relative.format(kernel=kernel) for name, relative in ARTIFACTS.items()
+    }
+
+
+def capture(target: Path, node_identity: dict, kernel: str) -> dict:
     try:
         status = target.lstat()
     except OSError as error:
@@ -171,22 +179,23 @@ def capture(target: Path, node_identity: dict) -> dict:
     if detector_backup.exists() or detector_backup.is_symlink():
         raise ContentEvidenceError("temporary platform detector was not restored")
 
+    paths = _artifacts_for(kernel)
     artifacts = {
         name: _artifact(target, relative)
-        for name, relative in ARTIFACTS.items()
+        for name, relative in paths.items()
     }
-    grub = _target_file(target, ARTIFACTS["boot_grub_config"]).read_text(
+    grub = _target_file(target, paths["boot_grub_config"]).read_text(
         encoding="utf-8",
         errors="strict",
     )
     for token in (
         "Omarchy",
-        "vmlinuz-linux-asahi",
-        "initramfs-linux-asahi.img",
+        f"vmlinuz-{kernel}",
+        f"initramfs-{kernel}.img",
     ):
         if token not in grub:
             raise ContentEvidenceError(f"GRUB configuration is missing {token}")
-    fstab = _target_file(target, ARTIFACTS["root_fstab"]).read_text(
+    fstab = _target_file(target, paths["root_fstab"]).read_text(
         encoding="utf-8",
         errors="strict",
     )
@@ -197,7 +206,7 @@ def capture(target: Path, node_identity: dict) -> dict:
 
     legacy_probe = _target_file(
         target,
-        ARTIFACTS["root_legacy_apple_probe"],
+        paths["root_legacy_apple_probe"],
     ).read_text(encoding="utf-8", errors="strict")
     # Either the repaired bare assignment or the guarded read newer runtimes
     # ship; both survive a missing DMI node under set -e.
@@ -210,14 +219,14 @@ def capture(target: Path, node_identity: dict) -> dict:
 
     locale = _target_file(
         target,
-        ARTIFACTS["root_locale_conf"],
+        paths["root_locale_conf"],
     ).read_text(encoding="utf-8", errors="strict")
     if locale != "LANG=en_US.UTF-8\n":
         raise ContentEvidenceError("installed locale configuration changed")
 
     full_os_marker = _target_file(
         target,
-        ARTIFACTS["root_full_os_marker"],
+        paths["root_full_os_marker"],
     ).read_text(encoding="utf-8", errors="strict")
     if full_os_marker != (
         "schema_version=1\n"
@@ -228,14 +237,14 @@ def capture(target: Path, node_identity: dict) -> dict:
 
     module_roots = []
     for pkgbase in sorted((target / "usr/lib/modules").glob("*/pkgbase")):
-        if pkgbase.read_text(encoding="utf-8").strip() != "linux-asahi":
+        if pkgbase.read_text(encoding="utf-8").strip() != kernel:
             continue
         module_root = pkgbase.parent
         if not (module_root / "vmlinuz").is_file():
-            raise ContentEvidenceError("linux-asahi module tree has no kernel")
+            raise ContentEvidenceError(f"{kernel} module tree has no kernel")
         module_roots.append(module_root)
     if len(module_roots) != 1:
-        raise ContentEvidenceError("expected exactly one linux-asahi module tree")
+        raise ContentEvidenceError(f"expected exactly one {kernel} module tree")
 
     pending = target / "var/lib/omarchy/provisioning/pending"
     if not pending.is_file() or pending.is_symlink():
@@ -289,7 +298,7 @@ def capture(target: Path, node_identity: dict) -> dict:
         "content_kind": "asahi-full-os-images",
         "artifacts": artifacts,
         "kernel": {
-            "package": "linux-asahi",
+            "package": kernel,
             "module_release": module_roots[0].name,
         },
         "boot_contract": boot_contract,
@@ -305,21 +314,24 @@ def capture(target: Path, node_identity: dict) -> dict:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 3:
+    if len(argv) != 4:
         print(
             "Usage: capture-asahi-os-package-contents.py <mounted-target> "
-            "<node-identity.json>",
+            "<node-identity.json> <kernel-package>",
             file=sys.stderr,
         )
         return 2
     try:
+        kernel = argv[3]
+        if kernel not in SUPPORTED_KERNEL_PACKAGES:
+            raise ContentEvidenceError(f"unsupported kernel package: {kernel}")
         node_identity_path = Path(argv[2])
         if not node_identity_path.is_file() or node_identity_path.is_symlink():
             raise ContentEvidenceError("pinned Node lock projection is missing or unsafe")
         node_identity = json.loads(node_identity_path.read_text())
         if not isinstance(node_identity, dict):
             raise ContentEvidenceError("pinned Node lock projection is invalid")
-        evidence = capture(Path(argv[1]), node_identity)
+        evidence = capture(Path(argv[1]), node_identity, kernel)
     except (ContentEvidenceError, OSError, json.JSONDecodeError) as error:
         print(f"capture-asahi-os-package-contents: {error}", file=sys.stderr)
         return 1

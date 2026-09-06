@@ -4,9 +4,32 @@
 # no boot-profile, GRUB, initramfs, or release-media implementation so those
 # downstream changes cannot invalidate the verified package cache.
 
+# The kernel the Apple Silicon payload installs. Read straight out of the
+# product descriptor with sed rather than jq: this runs before the build host
+# packages are installed, and a missing jq must not silently downgrade an
+# Aurora build to the Asahi kernel.
+asahi_kernel_package() {
+  local product=${OMARCHY_ASAHI_PRODUCT:-}
+  local kernel
+
+  [[ -n $product ]] || { printf 'linux-asahi\n'; return 0; }
+  [[ -r $product ]] || {
+    echo "product descriptor is unreadable: $product" >&2
+    return 1
+  }
+  kernel=$(sed -n 's/^[[:space:]]*"kernel_package"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+    "$product" | head -1)
+  [[ $kernel =~ ^linux-[a-z0-9]+$ ]] || {
+    echo "product descriptor names no usable kernel package: $product" >&2
+    return 1
+  }
+  printf '%s\n' "$kernel"
+}
+
 select_omarchy_package_roles() {
   OMARCHY_ISO_REF=${OMARCHY_ISO_REF:-quattro}
   OMARCHY_ARCH=${OMARCHY_ARCH:-x86_64}
+  ASAHI_KERNEL_PACKAGE=$(asahi_kernel_package)
 
   # Edge, dev, local-source, and every ARM build consume the Quattro package
   # recipes explicitly. Other x86 releases use the published stable roles.
@@ -102,11 +125,11 @@ filter_target_packages() {
         limine)
           line=grub
           ;;
-        linux|linux-asahi)
-          line=linux-asahi
+        linux|linux-asahi|linux-aurora)
+          line=${ASAHI_KERNEL_PACKAGE:-linux-asahi}
           ;;
-        linux-headers|linux-asahi-headers)
-          line=linux-asahi-headers
+        linux-headers|linux-asahi-headers|linux-aurora-headers)
+          line=${ASAHI_KERNEL_PACKAGE:-linux-asahi}-headers
           ;;
       esac
     elif [[ $OMARCHY_ARCH == aarch64 ]]; then

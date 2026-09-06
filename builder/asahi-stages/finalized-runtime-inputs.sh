@@ -6,6 +6,9 @@
 prepare_finalized_runtime_inputs() {
   local runtime_root="$build_cache_dir/airootfs/usr/share/omarchy-iso"
   local installed_pacman_source=/configs/airootfs/usr/share/omarchy-iso/pacman-online-installed-arm.conf
+  if [[ ${ASAHI_KERNEL_PACKAGE:-linux-asahi} == linux-aurora ]]; then
+    installed_pacman_source=/configs/airootfs/usr/share/omarchy-iso/pacman-online-installed-arm-aurora.conf
+  fi
 
   [[ $OMARCHY_ARCH == aarch64 ]] || return 0
   mkdir -p "$runtime_root"
