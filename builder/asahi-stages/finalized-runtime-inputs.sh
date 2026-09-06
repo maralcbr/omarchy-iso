@@ -13,6 +13,8 @@ prepare_finalized_runtime_inputs() {
     "$runtime_root/arm-repository"
   install -m 0644 "$offline_mirror_dir/ARM-RUNTIME" \
     "$runtime_root/arm-runtime"
+  install -m 0644 "$offline_mirror_dir/ARM-RUNTIME-CHANNEL" \
+    "$runtime_root/arm-runtime-channel"
   install -m 0644 /builder/omarchy-arm-repository.asc \
     "$runtime_root/omarchy-arm-repository.asc"
 

@@ -44,11 +44,18 @@ class ArmPackageRepositoryTest(unittest.TestCase):
         inputs = {
             "arm-repository": "repository record\n",
             "arm-runtime": "runtime record\n",
+            "arm-runtime-channel": "format=1\nsequence=7\ntag=asahi-quattro-dddddddd\n",
             "pacman-online-installed-arm.conf": "[options]\nArchitecture = aarch64\n",
             "omarchy-arm-repository.asc": "public key\n",
         }
         for name, content in inputs.items():
             (self.media / name).write_text(content)
+        # What the build-time offline repository leaves behind, and nothing for
+        # the repositories the installed configuration names.
+        sync_dir = self.target / "var/lib/pacman/sync"
+        sync_dir.mkdir(parents=True)
+        (sync_dir / "offline.db").write_bytes(b"build-time database")
+        (sync_dir / "omarchy.db").write_bytes(b"stale pin database")
 
         with patch.dict(os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}), patch(
             "subprocess.run"
@@ -71,12 +78,20 @@ class ArmPackageRepositoryTest(unittest.TestCase):
             (self.target / "usr/share/omarchy/omarchy-arm-repository.asc").read_text(),
             inputs["omarchy-arm-repository.asc"],
         )
-        self.assertEqual(run.call_count, 2)
+        release_state = self.target / "var/lib/omarchy/asahi-quattro-release"
+        self.assertEqual(release_state.read_text(), inputs["arm-runtime-channel"])
+        self.assertEqual(release_state.stat().st_mode & 0o777, 0o644)
+        self.assertEqual(list(sync_dir.iterdir()), [])
+        self.assertEqual(run.call_count, 3)
         self.assertEqual(run.call_args_list[0].args[0][2:4], ["pacman-key", "--add"])
         self.assertEqual(run.call_args_list[1].args[0][-2:], [
             "--lsign-key",
             "C81AC3E2A99556F9B21D5FEA3DD49BC9F8360BDC",
         ])
+        self.assertEqual(
+            run.call_args_list[2].args[0],
+            ["pacman", "--sysroot", str(self.target), "--disable-sandbox", "--noconfirm", "-Sy"],
+        )
 
     def test_arm_marker_requires_every_pinned_input(self) -> None:
         (self.media / "arm-repository").write_text("repository record\n")

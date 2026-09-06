@@ -325,6 +325,10 @@
           "required": true
         },
         {
+          "path": "arm-runtime-channel",
+          "required": true
+        },
+        {
           "path": "install-debug",
           "required": false
         },

@@ -75,6 +75,19 @@ for index in $(seq 1 6); do
 done
 printf 'manifest signature\n' >"$remote/$runtime_release/asahi-quattro-bundle.manifest.sig"
 
+channel_sequence=7
+channel_tag="asahi-quattro-${runtime_commit:0:8}"
+mkdir -p "$remote/asahi-quattro-channel-$channel_sequence"
+cat >"$remote/asahi-quattro-channel-$channel_sequence/asahi-quattro-channel" <<EOF
+format=1
+channel=asahi-quattro
+sequence=$channel_sequence
+release_tag=$channel_tag
+source_commit=$runtime_commit
+manifest=asahi-quattro-bundle.manifest
+manifest_sha256=$(sha256sum "$runtime_manifest" | cut -d' ' -f1)
+EOF
+printf 'channel signature\n' >"$remote/asahi-quattro-channel-$channel_sequence/asahi-quattro-channel.sig"
 cat >"$builder/arm-package-snapshots.conf" <<EOF
 ARM_REPOSITORY_RELEASE=$repository_release
 ARM_REPOSITORY_DESCRIPTOR_RELEASE=$descriptor_release
@@ -86,6 +99,9 @@ ARM_RUNTIME_RELEASE=$runtime_release
 ARM_RUNTIME_MANIFEST_SHA256=$(sha256sum "$runtime_manifest" | cut -d' ' -f1)
 ARM_RUNTIME_SOURCE_COMMIT=$runtime_commit
 ARM_RUNTIME_SIGNING_FINGERPRINT=$fingerprint
+ARM_RUNTIME_CHANNEL_SEQUENCE=$channel_sequence
+ARM_RUNTIME_CHANNEL_TAG=$channel_tag
+ARM_RUNTIME_CHANNEL_SIGNING_FINGERPRINT=$fingerprint
 EOF
 
 cat >"$stubs/curl" <<'STUB'
@@ -136,6 +152,20 @@ package_count=$(find "$destination" -maxdepth 1 -type f -name '*.pkg.tar.*' ! -n
 (( package_count == 37 ))
 [[ -f $destination/ARM-REPOSITORY && -f $destination/ARM-RUNTIME ]]
 (( $(wc -l <"$destination/ARM-PACKAGES") == 37 ))
+# The seeded installed-state record names the pinned channel and both sources.
+diff <(printf 'format=1\nsequence=%s\ntag=%s\nsource_commit=%s\npackage_source_commit=%s\n' \
+  "$channel_sequence" "$channel_tag" "$runtime_commit" "$source_commit") "$destination/ARM-RUNTIME-CHANNEL"
+
+# A channel whose record disagrees with the pinned runtime is refused.
+channel_file="$remote/asahi-quattro-channel-$channel_sequence/asahi-quattro-channel"
+cp "$channel_file" "$channel_file.good"
+sed -i "s/^source_commit=.*/source_commit=$(printf 'f%.0s' {1..40})/" "$channel_file"
+if BUILDER_ROOT="$builder" INSTALLED_PACMAN_CONF="$installed_conf" PATH="$stubs:$PATH" \
+  bash "$ROOT/builder/fetch-arm-package-snapshots.sh" "$work/wrong-channel-destination" 2>/dev/null; then
+  echo "fetch accepted a channel that does not serve the pinned runtime" >&2
+  exit 1
+fi
+mv "$channel_file.good" "$channel_file"
 
 printf 'corrupted\n' >>"$remote/$repository_release/repo-pkg-01-1-1-aarch64.pkg.tar.xz"
 if BUILDER_ROOT="$builder" INSTALLED_PACMAN_CONF="$installed_conf" PATH="$stubs:$PATH" \

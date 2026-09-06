@@ -16,6 +16,9 @@ source "$builder_root/arm-package-snapshots.conf"
 [[ $ARM_RUNTIME_MANIFEST_SHA256 =~ ^[0-9a-f]{64}$ ]]
 [[ $ARM_RUNTIME_SOURCE_COMMIT =~ ^[0-9a-f]{40}$ ]]
 [[ $ARM_RUNTIME_SIGNING_FINGERPRINT =~ ^[A-F0-9]{40}$ ]]
+[[ $ARM_RUNTIME_CHANNEL_SEQUENCE =~ ^[1-9][0-9]*$ ]]
+[[ $ARM_RUNTIME_CHANNEL_TAG == "asahi-quattro-${ARM_RUNTIME_SOURCE_COMMIT:0:8}" ]]
+[[ $ARM_RUNTIME_CHANNEL_SIGNING_FINGERPRINT =~ ^[A-F0-9]{40}$ ]]
 
 # The cached package files and the repository the installed system syncs from
 # must come from the same release. When they differ, a package built in both
@@ -146,8 +149,33 @@ while IFS= read -r record; do
     "$ARM_RUNTIME_SIGNING_FINGERPRINT" "$record" "" "$work/gnupg-runtime"
 done < <(sed -n 's/^package=//p' "$work/runtime.manifest")
 
+# The channel record is what omarchy-update-asahi-bundle compares an installed
+# system against. Fetch the pinned channel release and prove it names exactly
+# the runtime pinned above, so the state seeded into the image cannot claim a
+# bundle the channel does not actually serve.
+channel_url="$repository_base/asahi-quattro-channel-$ARM_RUNTIME_CHANNEL_SEQUENCE"
+download "$channel_url/asahi-quattro-channel" "$work/channel"
+download "$channel_url/asahi-quattro-channel.sig" "$work/channel.sig"
+verify_signature "$builder_root/omarchy-arm-runtime.asc" "$work/channel.sig" \
+  "$work/channel" "$ARM_RUNTIME_CHANNEL_SIGNING_FINGERPRINT" "$work/gnupg-channel"
+grep -Fxq 'format=1' "$work/channel"
+grep -Fxq 'channel=asahi-quattro' "$work/channel"
+grep -Fxq "sequence=$ARM_RUNTIME_CHANNEL_SEQUENCE" "$work/channel"
+grep -Fxq "release_tag=$ARM_RUNTIME_CHANNEL_TAG" "$work/channel"
+grep -Fxq "source_commit=$ARM_RUNTIME_SOURCE_COMMIT" "$work/channel"
+grep -Fxq "manifest_sha256=$ARM_RUNTIME_MANIFEST_SHA256" "$work/channel"
+
 install -m 0644 "$work/CANDIDATE" "$destination/ARM-REPOSITORY"
 install -m 0644 "$work/runtime.manifest" "$destination/ARM-RUNTIME"
+# Same shape omarchy-install-asahi-fresh writes on a scripted install.
+cat >"$destination/ARM-RUNTIME-CHANNEL" <<EOF
+format=1
+sequence=$ARM_RUNTIME_CHANNEL_SEQUENCE
+tag=$ARM_RUNTIME_CHANNEL_TAG
+source_commit=$ARM_RUNTIME_SOURCE_COMMIT
+package_source_commit=$ARM_REPOSITORY_SOURCE_COMMIT
+EOF
+chmod 0644 "$destination/ARM-RUNTIME-CHANNEL"
 {
   sed -n 's/^package=//p' "$work/CANDIDATE"
   sed -n 's/^package=//p' "$work/runtime.manifest"

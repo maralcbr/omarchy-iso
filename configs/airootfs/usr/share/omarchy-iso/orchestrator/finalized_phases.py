@@ -481,12 +481,13 @@ def configure_arm_package_repository(ctx: InstallContext) -> None:
     media_root = Path(os.environ.get("OMARCHY_ISO_MEDIA_ROOT", "/usr/share/omarchy-iso"))
     repository_record = media_root / "arm-repository"
     runtime_record = media_root / "arm-runtime"
+    channel_record = media_root / "arm-runtime-channel"
     pacman_config = media_root / "pacman-online-installed-arm.conf"
     public_key = media_root / "omarchy-arm-repository.asc"
 
     if not repository_record.exists():
         return
-    for required in (runtime_record, pacman_config, public_key):
+    for required in (runtime_record, channel_record, pacman_config, public_key):
         if not required.is_file():
             raise RuntimeError(f"ARM package input is missing: {required}")
 
@@ -494,6 +495,12 @@ def configure_arm_package_repository(ctx: InstallContext) -> None:
     target_state.mkdir(parents=True, exist_ok=True)
     shutil.copy(repository_record, target_state / "ARM-REPOSITORY")
     shutil.copy(runtime_record, target_state / "ARM-RUNTIME")
+    # What omarchy-update-asahi-bundle reads to know which bundle is installed.
+    # Without it a fresh install re-downloads the bundle it already carries on
+    # its first update.
+    release_state = ctx.target / "var/lib/omarchy/asahi-quattro-release"
+    shutil.copy(channel_record, release_state)
+    release_state.chmod(0o644)
 
     target_key = ctx.target / "usr/share/omarchy/omarchy-arm-repository.asc"
     target_key.parent.mkdir(parents=True, exist_ok=True)
@@ -517,6 +524,29 @@ def configure_arm_package_repository(ctx: InstallContext) -> None:
             "pacman-key",
             "--lsign-key",
             "C81AC3E2A99556F9B21D5FEA3DD49BC9F8360BDC",
+        ],
+        check=True,
+    )
+
+    # The image was assembled from the build-time offline repository, which
+    # leaves its database behind and none for the repositories the installed
+    # configuration names. pacstrap leaves an x86_64 install with every
+    # configured repository already synced; give the installed system the same
+    # so its first `pacman -S` resolves instead of failing with
+    # "could not find database". --sysroot reads the target's configuration
+    # and keyring without a chroot, so name resolution stays the builder's.
+    sync_dir = ctx.target / "var/lib/pacman/sync"
+    if sync_dir.is_dir():
+        for stale in sync_dir.iterdir():
+            stale.unlink()
+    subprocess.run(
+        [
+            "pacman",
+            "--sysroot",
+            str(ctx.target),
+            "--disable-sandbox",
+            "--noconfirm",
+            "-Sy",
         ],
         check=True,
     )
