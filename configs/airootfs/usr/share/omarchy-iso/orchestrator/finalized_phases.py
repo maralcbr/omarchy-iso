@@ -934,6 +934,7 @@ def _assert_boot_hooks_restored(ctx: InstallContext) -> None:
 
 
 def _assert_asahi_boot_update_hooks(ctx: InstallContext) -> None:
+    kernel = _storage_intent(ctx).get("kernel") or "linux-asahi"
     required_text = {
         ctx.target / "usr/share/libalpm/hooks/90-mkinitcpio-install.hook": (
             "Target = usr/lib/modules/*/vmlinuz",
@@ -943,9 +944,9 @@ def _assert_asahi_boot_update_hooks(ctx: InstallContext) -> None:
             "Target = usr/lib/asahi-boot/*",
             "Exec = /usr/bin/update-m1n1",
         ),
-        ctx.target / "etc/mkinitcpio.d/linux-asahi.preset": (
-            "/boot/vmlinuz-linux-asahi",
-            "/boot/initramfs-linux-asahi.img",
+        ctx.target / f"etc/mkinitcpio.d/{kernel}.preset": (
+            f"/boot/vmlinuz-{kernel}",
+            f"/boot/initramfs-{kernel}.img",
         ),
     }
     for path, tokens in required_text.items():

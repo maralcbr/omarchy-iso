@@ -125,6 +125,11 @@ def _set_shell_assignment(text: str, name: str, value: str) -> str:
     return text.rstrip() + "\n" + replacement + "\n"
 
 
+# Kernels that ship Apple device trees and boot through m1n1 + GRUB. The Aurora
+# kernel is the Asahi one with the Aurora Silicon patches, selected by product.
+SUPPORTED_ASAHI_KERNELS = ("linux-asahi", "linux-aurora")
+
+
 def _asahi_kernel_source(ctx: InstallContext, kernel: str) -> Path:
     matches = []
     for pkgbase in sorted((ctx.target / "usr/lib/modules").glob("*/pkgbase")):
@@ -150,8 +155,8 @@ def _prepare_asahi_kernel_and_initramfs(
     kernel = storage.get("kernel") or (
         ctx.user_configuration.get("kernels") or ["linux-asahi"]
     )[0]
-    if kernel != "linux-asahi":
-        raise RuntimeError(f"Asahi GRUB requires linux-asahi, got {kernel}")
+    if kernel not in SUPPORTED_ASAHI_KERNELS:
+        raise RuntimeError(f"Asahi GRUB requires an Apple Silicon kernel, got {kernel}")
 
     boot_mount = storage.get("boot_mount", "/boot")
     if boot_mount != "/boot":
@@ -324,7 +329,7 @@ def finalize_asahi_grub_boot(ctx: InstallContext) -> None:
         if not path.exists() or (path.is_file() and not path.stat().st_size):
             raise RuntimeError(f"required Asahi boot input missing or empty: {path}")
 
-    shared.info("› building linux-asahi initramfs")
+    shared.info("› building the Apple Silicon kernel initramfs")
     _prepare_asahi_kernel_and_initramfs(ctx)
     _configure_asahi_grub_defaults(ctx)
     root_device = shared._btrfs_root_device(ctx)
