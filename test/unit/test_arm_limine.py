@@ -256,6 +256,52 @@ class ArmLimineTest(unittest.TestCase):
 
             phases_impl._assert_boot_hooks_restored(ctx)
 
+    def test_asahi_boot_validation_follows_the_product_kernel(self) -> None:
+        # The Aurora payload installs linux-aurora; the boot contract must be
+        # checked against that kernel's preset, not the Asahi one.
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            vendor_hooks = target / "usr/share/libalpm/hooks"
+            vendor_hooks.mkdir(parents=True)
+            (vendor_hooks / "90-mkinitcpio-install.hook").write_text(
+                "Target = usr/lib/modules/*/vmlinuz\n"
+                "Exec = /usr/share/libalpm/scripts/mkinitcpio install\n"
+            )
+            (vendor_hooks / "95-m1n1-install.hook").write_text(
+                "Target = usr/lib/asahi-boot/*\nExec = /usr/bin/update-m1n1\n"
+            )
+            mkinitcpio_script = target / "usr/share/libalpm/scripts/mkinitcpio"
+            mkinitcpio_script.parent.mkdir(parents=True)
+            mkinitcpio_script.write_text("#!/bin/sh\n")
+            mkinitcpio_script.chmod(0o755)
+            preset = target / "etc/mkinitcpio.d/linux-aurora.preset"
+            preset.parent.mkdir(parents=True)
+            preset.write_text(
+                "ALL_kver='/boot/vmlinuz-linux-aurora'\n"
+                "default_image='/boot/initramfs-linux-aurora.img'\n"
+            )
+            updater = target / "usr/bin/update-m1n1"
+            updater.parent.mkdir(parents=True)
+            updater.write_text("#!/bin/sh\n")
+            updater.chmod(0o755)
+            aurora = SimpleNamespace(
+                target=target,
+                is_protected=True,
+                omarchy_install={
+                    "boot": {"backend": "asahi-grub"},
+                    "storage": {"kernel": "linux-aurora"},
+                },
+            )
+            asahi = SimpleNamespace(
+                target=target,
+                is_protected=True,
+                omarchy_install={"boot": {"backend": "asahi-grub"}},
+            )
+
+            phases_impl._assert_boot_hooks_restored(aurora)
+            with self.assertRaisesRegex(RuntimeError, "linux-asahi.preset"):
+                phases_impl._assert_boot_hooks_restored(asahi)
+
     def test_asahi_target_setup_uses_a_deterministic_apple_probe(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp)
