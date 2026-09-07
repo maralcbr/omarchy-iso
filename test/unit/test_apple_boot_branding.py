@@ -56,6 +56,34 @@ class AppleBootBrandingTests(unittest.TestCase):
             [458_752, 467_968, 533_504],
         )
 
+    def test_aurora_manifest_pins_the_aurora_boot_image_only(self) -> None:
+        # The Aurora kernel's device trees change the m1n1 boot image, so it
+        # carries its own byte-exact pin. Everything else about branding is the
+        # Asahi contract: same logos, same offsets, same source regions.
+        asahi_path = ROOT / "builder/branding/branding-manifest.json"
+        aurora_path = ROOT / "builder/branding/branding-manifest-aurora.json"
+        asahi = MODULE.load_manifest(asahi_path)
+        aurora = MODULE.load_manifest(aurora_path)
+        product = json.loads(
+            (ROOT / "builder/products/omarchy-mx-mac-aurora.json").read_text()
+        )
+
+        MODULE.verify_assets(aurora, aurora_path.parent)
+
+        self.assertEqual(aurora["source_logo"], asahi["source_logo"])
+        self.assertEqual(aurora["volume_icon"], asahi["volume_icon"])
+        self.assertEqual(aurora["m1n1"]["replacements"], asahi["m1n1"]["replacements"])
+        self.assertNotEqual(aurora["m1n1"]["input"], asahi["m1n1"]["input"])
+        self.assertEqual(aurora["m1n1"]["input"]["size_bytes"], 6_209_481)
+        self.assertEqual(
+            aurora["m1n1"]["input"]["size_bytes"],
+            aurora["m1n1"]["output"]["size_bytes"],
+        )
+        self.assertEqual(
+            product["branding"]["m1n1_boot_sha256"],
+            aurora["m1n1"]["output"]["sha256"],
+        )
+
     def test_m1n1_patch_changes_only_declared_logo_regions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)

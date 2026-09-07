@@ -12,7 +12,7 @@
   "root_filesystem_uuid": "4f4d5801-524f-4f54-8000-000000000001",
   "boot_backend": "asahi-grub",
   "branding": {
-    "m1n1_boot_sha256": "28c76ee3eb046a903db81277ad8f7ab887059b2fa522eacb47445c7f8868288b",
+    "m1n1_boot_sha256": "60365d2848d50b3b6f06969fcac58393e586e504e7dc9a480a40d6d621e6ca85",
     "volume_icon_member": "omarchy-volume.icns",
     "volume_icon_sha256": "cf26ed5d2831db99c00d62ca046040e01a18e08e63363d629340d04ac6ec8c23",
     "volume_icon_size_bytes": 42899

@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# The m1n1 boot image embeds the kernel's device trees, so its byte-exact
+# branding pin is per kernel.
+branding_manifest=/builder/branding/branding-manifest.json
+[[ ${kernel_package:-linux-asahi} != linux-aurora ]] ||
+  branding_manifest=/builder/branding/branding-manifest-aurora.json
+
 run_sealed_release_package_stage() {
   archive_options=$work/archive-options.json
   printf '%s\n' \
@@ -12,7 +18,7 @@ run_sealed_release_package_stage() {
     --input finalized-boot="$finalized_directory/boot.img" \
     --input finalized-esp="$finalized_directory/esp" \
     --input volume-icon=/builder/branding/omarchy-volume.icns \
-    --input branding-manifest=/builder/branding/branding-manifest.json \
+    --input branding-manifest="$branding_manifest" \
     --input archive-options="$archive_options"
   if restore_stage sealed-release-package "$sealed_identity" \
     --destination release-package="$sealed_package"; then

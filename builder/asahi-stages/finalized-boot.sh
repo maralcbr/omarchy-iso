@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# The m1n1 boot image embeds the kernel's device trees, so its byte-exact
+# branding pin is per kernel.
+branding_manifest=/builder/branding/branding-manifest.json
+[[ ${kernel_package:-linux-asahi} != linux-aurora ]] ||
+  branding_manifest=/builder/branding/branding-manifest-aurora.json
+
 run_finalized_boot_stage() {
   finalized_directory=$work/finalized-boot
   finalized_identity=$work/finalized-boot.identity.json
@@ -17,7 +23,7 @@ run_finalized_boot_stage() {
     --input installed-config-verifier=/builder/verify-asahi-installed-system.py \
     --input content-capture=/builder/capture-asahi-os-package-contents.py \
     --input branding-tool=/builder/brand-apple-silicon-boot.py \
-    --input branding-manifest=/builder/branding/branding-manifest.json \
+    --input branding-manifest="$branding_manifest" \
     --input branding-logo-48=/builder/branding/bootlogo_48.bin \
     --input branding-logo-128=/builder/branding/bootlogo_128.bin \
     --input branding-logo-256=/builder/branding/bootlogo_256.bin
@@ -69,7 +75,7 @@ run_finalized_boot_stage() {
   rm -f "$target/var/lib/systemd/random-seed"
   rm -f "$target/etc/ssh/ssh_host_"*
   python3 /builder/brand-apple-silicon-boot.py patch-m1n1 \
-    /builder/branding/branding-manifest.json \
+    "$branding_manifest" \
     /builder/branding \
     "$target/boot/efi/m1n1/boot.bin" \
     "$target/boot/efi/m1n1/boot.bin"

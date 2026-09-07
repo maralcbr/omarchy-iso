@@ -19,8 +19,8 @@ differing=$(jq -rn \
   --slurpfile aurora "$aurora_product" \
   '($asahi[0] | keys) as $keys
    | [$keys[] | select($asahi[0][.] != $aurora[0][.])] | sort | join(",")')
-[[ $differing == "kernel_package,package_filename" ]] || {
-  echo "not ok - aurora product differs beyond the kernel and filename: $differing"
+[[ $differing == "branding,kernel_package,package_filename" ]] || {
+  echo "not ok - aurora product differs beyond the kernel, filename and boot branding: $differing"
   exit 1
 }
 [[ $(jq -r '.kernel_package' "$aurora_product") == linux-aurora ]] || {
@@ -28,6 +28,16 @@ differing=$(jq -rn \
 }
 [[ $(jq -r '.package_filename' "$aurora_product") == *-aurora-os-package.zip ]] || {
   echo "not ok - aurora payload filename is not distinguishable"; exit 1
+}
+# Only the m1n1 digest moves inside branding: the boot image embeds the kernel's
+# device trees, so it is pinned per kernel, and it must agree with the manifest.
+[[ $(jq -r '.branding | del(.m1n1_boot_sha256)' "$aurora_product") == \
+   $(jq -r '.branding | del(.m1n1_boot_sha256)' "$asahi_product") ]] || {
+  echo "not ok - aurora branding differs beyond the m1n1 digest"; exit 1
+}
+[[ $(jq -r '.branding.m1n1_boot_sha256' "$aurora_product") == \
+   $(jq -r '.m1n1.output.sha256' "$ROOT/builder/branding/branding-manifest-aurora.json") ]] || {
+  echo "not ok - aurora product m1n1 digest does not match the aurora branding manifest"; exit 1
 }
 [[ $(jq -r '.schema_version' "$aurora_product") == 1 ]] || {
   echo "not ok - aurora product changed the product schema"; exit 1
