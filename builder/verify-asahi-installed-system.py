@@ -25,8 +25,8 @@ from pathlib import Path
 
 EXPECTED_ROOT_UUID = "4f4d5801-524f-4f54-8000-000000000001"
 REQUIRED_PACMAN_SECTIONS = ("omarchy", "asahi-alarm", "core", "extra", "alarm", "aur")
+SUPPORTED_KERNELS = ("linux-asahi", "linux-aurora")
 REQUIRED_PACKAGES = (
-    "linux-asahi",
     "asahi-fwextract",
     "asahi-desktop-meta",
     "vulkan-asahi",
@@ -200,13 +200,14 @@ def installed_package_names(root: Path) -> set[str]:
     return names
 
 
-def check_packages(verification: Verification, root: Path) -> None:
+def check_packages(verification: Verification, root: Path, kernel: str) -> None:
     installed = installed_package_names(root)
-    missing = [name for name in REQUIRED_PACKAGES if name not in installed]
+    required = (kernel, *REQUIRED_PACKAGES)
+    missing = [name for name in required if name not in installed]
     verification.record(
         "packages-required-present",
         not missing,
-        f"all {len(REQUIRED_PACKAGES)} required packages installed"
+        f"all {len(required)} required packages installed"
         if not missing
         else "missing packages: " + ", ".join(missing),
     )
@@ -236,7 +237,9 @@ def check_identity(verification: Verification, root: Path) -> None:
     )
 
 
-def check_boot(verification: Verification, boot: Path, expected_root_uuid: str) -> None:
+def check_boot(
+    verification: Verification, boot: Path, expected_root_uuid: str, kernel: str
+) -> None:
     grub_config = boot / "grub/grub.cfg"
     if not grub_config.is_file():
         verification.record("boot-grub-config-present", False, "grub/grub.cfg is missing")
@@ -275,8 +278,8 @@ def check_boot(verification: Verification, boot: Path, expected_root_uuid: str) 
     )
 
     for name, identifier in (
-        ("vmlinuz-linux-asahi", "boot-kernel-present"),
-        ("initramfs-linux-asahi.img", "boot-initramfs-present"),
+        (f"vmlinuz-{kernel}", "boot-kernel-present"),
+        (f"initramfs-{kernel}.img", "boot-initramfs-present"),
     ):
         path = boot / name
         present = path.is_file() and path.stat().st_size > 0
@@ -294,6 +297,7 @@ def main() -> int:
     parser.add_argument("--root-tree", required=True, type=Path)
     parser.add_argument("--boot-tree", type=Path)
     parser.add_argument("--expected-root-uuid", default=EXPECTED_ROOT_UUID)
+    parser.add_argument("--kernel", default="linux-asahi", choices=SUPPORTED_KERNELS)
     arguments = parser.parse_args()
 
     if not arguments.root_tree.is_dir():
@@ -307,10 +311,12 @@ def main() -> int:
     check_pacman(verification, arguments.root_tree)
     check_network(verification, arguments.root_tree)
     check_enabled_units(verification, arguments.root_tree)
-    check_packages(verification, arguments.root_tree)
+    check_packages(verification, arguments.root_tree, arguments.kernel)
     check_identity(verification, arguments.root_tree)
     if arguments.boot_tree is not None:
-        check_boot(verification, arguments.boot_tree, arguments.expected_root_uuid)
+        check_boot(
+            verification, arguments.boot_tree, arguments.expected_root_uuid, arguments.kernel
+        )
 
     evidence = {
         "schema_version": 1,

@@ -190,3 +190,26 @@ jq -e '
   (.checks["packages-required-present"].detail | contains("speakersafetyd"))
 ' "$work/no-package.json" >/dev/null
 echo "ok - a missing required package fails the validation"
+
+# --- the Aurora payload names its kernel; the checks follow it ------------
+
+fixture="$work/aurora"
+build_fixture "$fixture"
+rm -rf "$fixture/root/var/lib/pacman/local/linux-asahi-1.0-1"
+mkdir -p "$fixture/root/var/lib/pacman/local/linux-aurora-1.0-1"
+sed -i 's/linux-asahi/linux-aurora/g' "$fixture/boot/grub/grub.cfg"
+mv "$fixture/boot/vmlinuz-linux-asahi" "$fixture/boot/vmlinuz-linux-aurora"
+mv "$fixture/boot/initramfs-linux-asahi.img" "$fixture/boot/initramfs-linux-aurora.img"
+python3 "$VERIFIER" --root-tree "$fixture/root" --boot-tree "$fixture/boot" \
+  --kernel linux-aurora >"$work/aurora.json" 2>"$work/aurora.json.err"
+jq -e '.result == "passed" and (.failed_checks | length) == 0' "$work/aurora.json" >/dev/null
+if python3 "$VERIFIER" --root-tree "$fixture/root" --boot-tree "$fixture/boot" \
+  >"$work/aurora-as-asahi.json" 2>/dev/null; then
+  echo "not ok - an Aurora tree must not pass as an Asahi one" >&2
+  exit 1
+fi
+jq -e '
+  .checks["packages-required-present"].result == "failed" and
+  .checks["boot-kernel-present"].result == "failed"
+' "$work/aurora-as-asahi.json" >/dev/null
+echo "ok - the verifier checks whichever kernel the payload names"

@@ -80,7 +80,7 @@ run_finalized_boot_stage() {
     "$target" "$node_runtime_identity" "$kernel_package" \
     >"$finalized_directory/installed-contents.json"
   python3 /builder/verify-asahi-installed-system.py \
-    --root-tree "$target" --boot-tree "$target/boot" \
+    --root-tree "$target" --boot-tree "$target/boot" --kernel "$kernel_package" \
     >"$finalized_directory/installed-config-verification.json"
   mkdir -p "$finalized_directory/esp"
   cp -a "$target/boot/efi/." "$finalized_directory/esp/"
