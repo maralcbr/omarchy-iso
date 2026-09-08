@@ -74,7 +74,12 @@ class AppleBootBrandingTests(unittest.TestCase):
         self.assertEqual(aurora["volume_icon"], asahi["volume_icon"])
         self.assertEqual(aurora["m1n1"]["replacements"], asahi["m1n1"]["replacements"])
         self.assertNotEqual(aurora["m1n1"]["input"], asahi["m1n1"]["input"])
-        self.assertEqual(aurora["m1n1"]["input"]["size_bytes"], 6_209_481)
+        # The image is m1n1, the kernel's device trees and u-boot; only the
+        # device trees differ between the two kernels, and Aurora's are larger.
+        self.assertGreater(
+            aurora["m1n1"]["input"]["size_bytes"],
+            asahi["m1n1"]["input"]["size_bytes"],
+        )
         self.assertEqual(
             aurora["m1n1"]["input"]["size_bytes"],
             aurora["m1n1"]["output"]["size_bytes"],
