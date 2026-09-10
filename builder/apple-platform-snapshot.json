@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-08-27T00:00:00Z",
+  "observed_at": "2026-09-10T03:04:57Z",
   "source": {
     "repository": "asahi-alarm/asahi-alarm",
     "release_tag": "aarch64",
@@ -65,15 +65,15 @@
     },
     {
       "name": "linux-asahi",
-      "filename": "linux-asahi-7.1.6.asahi1-1-aarch64.pkg.tar.xz",
-      "sha256": "950cff721c63d24ea98bac8087b4aa5b1a025afa7c1f047dd681b191e8b1b420",
-      "signature_sha256": "17726e4a67f98967f7ee3936053a60c99a85398c77ad9dbf11070317c9d7117c"
+      "filename": "linux-asahi-7.1.13.asahi1-1-aarch64.pkg.tar.xz",
+      "sha256": "14c5456c9d8a634dda5c408237607a87c32850c2a454897df9b782bd03d5d725",
+      "signature_sha256": "e493fb80b4e0467399c4721db1d13eef4c627bcd82f5efe84b02b3ba5dba0098"
     },
     {
       "name": "linux-asahi-headers",
-      "filename": "linux-asahi-headers-7.1.6.asahi1-1-aarch64.pkg.tar.xz",
-      "sha256": "5aa3168b27dfc845db8ec078ca648040d4451275eb12d7c7f4992d6208c4c91d",
-      "signature_sha256": "d6dd4069a4ec7f29d7548349727f9212dd46ff5a4e71fc8fb809f589d4b237d2"
+      "filename": "linux-asahi-headers-7.1.13.asahi1-1-aarch64.pkg.tar.xz",
+      "sha256": "1a984153718bc02c150222643b53e56ffffbff243b213f6f5eb02e6cfc4a6bbf",
+      "signature_sha256": "a3c103ca42c59b869e2f32c150063ce034b93f77e7aab7dc5cff8874b8faf6b1"
     },
     {
       "name": "lzfse",
@@ -113,9 +113,9 @@
     },
     {
       "name": "uboot-asahi",
-      "filename": "uboot-asahi-2026.04.asahi2-1-aarch64.pkg.tar.xz",
-      "sha256": "968315a742534497eda70be19931ff6c6f774deca4d0bcd53c7f49f287424b2b",
-      "signature_sha256": "b856f7b9c5856aef21af3b8b2e2e6ed40edcfcaa7152fdcc72f9734b2947f289"
+      "filename": "uboot-asahi-2026.07.asahi2-1-aarch64.pkg.tar.xz",
+      "sha256": "7cd3040cda63f0c6ef6703fd2d0de1b8016f8b3c2c1f3dbe362ecf1e371e44ed",
+      "signature_sha256": "7a9b7dff7478bf39f13865c2ba452220b9bc21856747f942bf5f63f86218667a"
     },
     {
       "name": "virglrenderer",

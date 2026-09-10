@@ -3,7 +3,7 @@
   "product_id": "omarchy-mx-mac",
   "name": "Omarchy MX Mac",
   "default_os_name": "Omarchy",
-  "package_filename": "omarchy-2026.09.08-aarch64-apple-silicon-aurora-os-package.zip",
+  "package_filename": "omarchy-2026.09.10-aarch64-apple-silicon-aurora-os-package.zip",
   "esp_size_bytes": 524288000,
   "esp_volume_id": "0x4f4d5801",
   "boot_size_bytes": 2147483648,
@@ -12,7 +12,7 @@
   "root_filesystem_uuid": "4f4d5801-524f-4f54-8000-000000000001",
   "boot_backend": "asahi-grub",
   "branding": {
-    "m1n1_boot_sha256": "0b2bbe236edc7380d2c1352f657cd4186f7779805c96c2bd5a0ed0e1fc6d4b5f",
+    "m1n1_boot_sha256": "35530d3da8e1ba1ff8d87e29523ec137bebb20600323363ea35b90fc9b9f35d7",
     "volume_icon_member": "omarchy-volume.icns",
     "volume_icon_sha256": "cf26ed5d2831db99c00d62ca046040e01a18e08e63363d629340d04ac6ec8c23",
     "volume_icon_size_bytes": 42899

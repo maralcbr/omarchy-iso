@@ -56,12 +56,12 @@
   },
   "m1n1": {
     "input": {
-      "sha256": "bb6829c44d8de26d6615406b41edc0beef2254766b5ed114afad2029db7ae856",
-      "size_bytes": 6205289
+      "sha256": "7d56b15fba7a11ca3f66868dc667ad1eaee57a38d8fa3c94820820f75fd59681",
+      "size_bytes": 6212622
     },
     "output": {
-      "sha256": "28c76ee3eb046a903db81277ad8f7ab887059b2fa522eacb47445c7f8868288b",
-      "size_bytes": 6205289
+      "sha256": "02d1f537c720f3a03104fdaaa467df46edc21d6d3225008b91994c1cbf44f4a2",
+      "size_bytes": 6212622
     },
     "replacements": [
       {
