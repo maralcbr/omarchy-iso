@@ -81,6 +81,11 @@ filtered=$(printf '%s\n' base linux-asahi linux-asahi-headers grub |
   printf '%s\n' "$filtered"
   exit 1
 }
+filtered=$(printf '%s\n' m1n1 linux-aurora linux-aurora-headers |
+  filter_target_packages | sort -u)
+[[ $filtered == $'linux-aurora\nlinux-aurora-headers\nm1n1-aurora' ]] || {
+  echo "not ok - Aurora platform additions retained conflicting upstream m1n1"; exit 1
+}
 ASAHI_KERNEL_PACKAGE=linux-asahi
 filtered=$(printf '%s\n' base linux-asahi linux-asahi-headers grub |
   filter_target_packages)

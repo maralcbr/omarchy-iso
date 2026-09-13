@@ -129,6 +129,9 @@ filter_target_packages() {
           line=${ASAHI_KERNEL_PACKAGE:-linux-asahi}
           [[ $line != linux-aurora ]] || printf '%s\n' m1n1-aurora
           ;;
+        m1n1)
+          [[ ${ASAHI_KERNEL_PACKAGE:-linux-asahi} != linux-aurora ]] || line=m1n1-aurora
+          ;;
         linux-headers|linux-asahi-headers|linux-aurora-headers)
           line=${ASAHI_KERNEL_PACKAGE:-linux-asahi}-headers
           ;;
