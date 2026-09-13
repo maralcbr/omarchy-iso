@@ -15,3 +15,12 @@ payload or any unexpected bytes before writing.
 These assets change product presentation only. They do not rename m1n1, the
 Asahi installer, the Asahi kernel work, or any other upstream component, and
 they do not alter upstream authorship or provenance.
+
+The Asahi 4.0.3 contract uses the signed m1n1 1.6.1, Linux Asahi 7.1.13,
+and U-Boot 2026.07 package inputs. Reassemble with the vendor update-m1n1
+algorithm, preserving U-Boot archive timestamps, and verify every original
+logo region before updating the full input/output hashes.
+
+Native builds mark the mounted image ESP with `.builder`, which the vendor
+helper explicitly honors instead of the physical host device tree. The marker
+is removed after package hooks finish and before the release ESP is captured.

@@ -41,11 +41,11 @@ class AppleBootBrandingTests(unittest.TestCase):
         self.assertEqual(manifest["m1n1"]["input"]["size_bytes"], 6_212_622)
         self.assertEqual(
             manifest["m1n1"]["input"]["sha256"],
-            "7d56b15fba7a11ca3f66868dc667ad1eaee57a38d8fa3c94820820f75fd59681",
+            "538ea120d9a2d1dbbeb6d64dd0bb46fbdf195d7ca720019209fa9cca1f479f3d",
         )
         self.assertEqual(
             manifest["m1n1"]["output"]["sha256"],
-            "02d1f537c720f3a03104fdaaa467df46edc21d6d3225008b91994c1cbf44f4a2",
+            "60e1c808b7a0c70f294c7cdfa34a5ed4de0d19df08700a49851055e7ea865bd8",
         )
         self.assertEqual(
             product["branding"]["m1n1_boot_sha256"],
