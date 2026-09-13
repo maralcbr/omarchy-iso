@@ -19,7 +19,7 @@ class AuroraBootstrapTest(unittest.TestCase):
             arg.annotation = None
         module = ast.Module(body=[function], type_ignores=[])
         for kernel, expected in (
-            ('linux-aurora', ['base', 'sudo', 'linux-firmware', 'mkinitcpio', 'm1n1-aurora']),
+            ('linux-aurora', ['base', 'sudo', 'linux-firmware', 'mkinitcpio', 'm1n1-aurora', 'uboot-asahi']),
             ('linux-asahi', None),
             ('linux', None),
         ):

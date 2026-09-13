@@ -74,6 +74,9 @@ run_finalized_boot_stage() {
   : >"$target/etc/machine-id"
   rm -f "$target/var/lib/systemd/random-seed"
   rm -f "$target/etc/ssh/ssh_host_"*
+  # All package hooks have finished. Installed systems must discover their
+  # own ESP normally; the builder-only marker must never enter the payload.
+  rm -f "$target/boot/efi/.builder"
   python3 /builder/brand-apple-silicon-boot.py patch-m1n1 \
     "$branding_manifest" \
     /builder/branding \

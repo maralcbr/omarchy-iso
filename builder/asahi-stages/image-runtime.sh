@@ -64,6 +64,10 @@ attach_images() {
   mkdir -p "$target/boot/efi"
   mount "$esp_loop" "$target/boot/efi"
   mounts+=("$target/boot/efi")
+  # asahi-scripts otherwise discovers the physical host ESP through device
+  # tree on native Apple Silicon. Its supported builder marker confines
+  # package hooks to this mounted image even when host hardware is visible.
+  : >"$target/boot/efi/.builder"
 }
 
 write_install_config() {
