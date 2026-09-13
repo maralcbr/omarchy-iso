@@ -203,6 +203,10 @@ class ArmLimineTest(unittest.TestCase):
                 'GRUB_CMDLINE_LINUX="zswap.enabled=0 rootfstype=btrfs"',
                 (target / "etc/default/grub").read_text(),
             )
+            self.assertIn(
+                'GRUB_VIDEO_BACKEND="efi_gop"',
+                (target / "etc/default/grub").read_text(),
+            )
             commands = [call.args[0] for call in run.call_args_list]
             self.assertIn(
                 ["arch-chroot", str(target), "mkinitcpio", "-P"],
