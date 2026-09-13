@@ -50,6 +50,7 @@
         "builder/asahi-stage-inputs.json",
         "builder/asahi-build-lock.json",
         "builder/products/omarchy-mx-mac.json",
+        "builder/products/omarchy-mx-mac-aurora.json",
         "configs/profiledef.sh"
       ],
       "lock_paths": [
@@ -150,6 +151,7 @@
         "builder/asahi-early-checkpoint-admission.sh",
         "builder/file-mode-adapter.sh",
         "builder/products/omarchy-mx-mac.json",
+        "builder/products/omarchy-mx-mac-aurora.json",
         "configs/profiledef.sh"
       ],
       "lock_paths": [
@@ -227,7 +229,8 @@
         "builder/asahi-cache-hit-policy.sh",
         "builder/asahi-lifecycle-lease.py",
         "builder/asahi-release-publication.py",
-        "builder/products/omarchy-mx-mac.json"
+        "builder/products/omarchy-mx-mac.json",
+        "builder/products/omarchy-mx-mac-aurora.json"
       ],
       "lock_paths": [
         "modes.$mode.esp_size_bytes",
@@ -457,7 +460,8 @@
         "builder/apple-platform-snapshot.json",
         "builder/verify-asahi-os-package.py",
         "builder/capture-asahi-os-package-contents.py",
-        "builder/products/omarchy-mx-mac.json"
+        "builder/products/omarchy-mx-mac.json",
+        "builder/products/omarchy-mx-mac-aurora.json"
       ],
       "admission_paths": [
         "archiso/archiso/mkarchiso",

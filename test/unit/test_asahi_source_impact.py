@@ -46,6 +46,18 @@ class AsahiSourceImpactPreviewTests(unittest.TestCase):
             profile=profile,
         )
 
+    def test_aurora_product_has_the_same_release_admission_as_asahi(self) -> None:
+        asahi = self.preview(
+            "builder/products/omarchy-mx-mac.json", intent="full", profile="qualification"
+        )
+        aurora = self.preview(
+            "builder/products/omarchy-mx-mac-aurora.json", intent="full", profile="qualification"
+        )
+        self.assertFalse(aurora["blocked"])
+        self.assertTrue(aurora["ready_for_expensive_work"])
+        for field in ("owner_stages", "admission_owner_stages", "invalidation_frontier"):
+            self.assertEqual(aurora[field], asahi[field])
+
     def test_boot_logo_change_is_ready_with_only_boot_and_outputs_invalidated(self) -> None:
         preview = self.preview("builder/branding/omarchy-logo.png")
 
