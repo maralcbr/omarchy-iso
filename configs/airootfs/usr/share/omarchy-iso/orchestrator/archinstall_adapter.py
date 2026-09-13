@@ -133,9 +133,16 @@ def open_installer(
     /mnt is left clean for a retry."""
     if not arch_config.disk_config:
         raise RuntimeError("disk_config missing from arch config")
+    # Select Aurora's provider before the kernel dependency can pull upstream
+    # m1n1 into the first pacstrap transaction. Later noninteractive installs
+    # cannot replace that conflicting provider.
+    base_packages = None
+    if "linux-aurora" in arch_config.kernels:
+        base_packages = ["base", "sudo", "linux-firmware", "mkinitcpio", "m1n1-aurora"]
     with Installer(
         mountpoint,
         arch_config.disk_config,
+        base_packages=base_packages,
         kernels=arch_config.kernels,
         silent=silent,
     ) as installer:
