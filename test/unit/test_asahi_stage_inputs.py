@@ -64,7 +64,7 @@ class AsahiStageInputTests(unittest.TestCase):
         product = json.loads(PRODUCT_PATH.read_text())
         self.assertEqual(
             product["package_filename"],
-            "omarchy-2026.09.10-aarch64-apple-silicon-asahi-os-package.zip",
+            "omarchy-2026.09.13-aarch64-apple-silicon-asahi-os-package.zip",
         )
 
     def assert_frontier(
