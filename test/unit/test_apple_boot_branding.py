@@ -57,9 +57,8 @@ class AppleBootBrandingTests(unittest.TestCase):
         )
 
     def test_aurora_manifest_pins_the_aurora_boot_image_only(self) -> None:
-        # The Aurora kernel's device trees change the m1n1 boot image, so it
-        # carries its own byte-exact pin. Everything else about branding is the
-        # Asahi contract: same logos, same offsets, same source regions.
+        # Aurora carries a compatible m1n1 and its own device trees. Its
+        # package already embeds the shared logos, so branding is idempotent.
         asahi_path = ROOT / "builder/branding/branding-manifest.json"
         aurora_path = ROOT / "builder/branding/branding-manifest-aurora.json"
         asahi = MODULE.load_manifest(asahi_path)
@@ -72,10 +71,15 @@ class AppleBootBrandingTests(unittest.TestCase):
 
         self.assertEqual(aurora["source_logo"], asahi["source_logo"])
         self.assertEqual(aurora["volume_icon"], asahi["volume_icon"])
-        self.assertEqual(aurora["m1n1"]["replacements"], asahi["m1n1"]["replacements"])
+        for actual, expected in zip(aurora["m1n1"]["replacements"], asahi["m1n1"]["replacements"], strict=True):
+            self.assertEqual(actual["offset"], expected["offset"])
+            self.assertEqual(actual["size_bytes"], expected["size_bytes"])
+            self.assertEqual(actual["replacement"], expected["replacement"])
+            self.assertEqual(actual["source_sha256"], actual["replacement"]["sha256"])
+        self.assertEqual(aurora["m1n1"]["input"], aurora["m1n1"]["output"])
         self.assertNotEqual(aurora["m1n1"]["input"], asahi["m1n1"]["input"])
-        # The image is m1n1, the kernel's device trees and u-boot; only the
-        # device trees differ between the two kernels, and Aurora's are larger.
+        # The image includes m1n1, device trees and u-boot; Aurora's
+        # hardware-qualified combination is larger than the Asahi image.
         self.assertGreater(
             aurora["m1n1"]["input"]["size_bytes"],
             asahi["m1n1"]["input"]["size_bytes"],
