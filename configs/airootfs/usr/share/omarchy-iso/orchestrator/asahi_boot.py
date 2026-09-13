@@ -198,6 +198,7 @@ def _configure_asahi_grub_defaults(ctx: InstallContext) -> Path:
         ("GRUB_DISTRIBUTOR", "Omarchy"),
         ("GRUB_TIMEOUT", "3"),
         ("GRUB_TIMEOUT_STYLE", "menu"),
+        ("GRUB_VIDEO_BACKEND", "efi_gop"),
         ("GRUB_CMDLINE_LINUX", "zswap.enabled=0 rootfstype=btrfs"),
         ("GRUB_CMDLINE_LINUX_DEFAULT", "quiet loglevel=3 splash"),
     ):

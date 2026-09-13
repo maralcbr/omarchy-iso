@@ -76,7 +76,7 @@ OMARCHY_ARCH=aarch64
 ASAHI_KERNEL_PACKAGE=linux-aurora
 filtered=$(printf '%s\n' base linux-asahi linux-asahi-headers grub |
   filter_target_packages)
-[[ $filtered == $'base\nlinux-aurora\nlinux-aurora-headers\ngrub' ]] || {
+[[ $filtered == $'base\nm1n1-aurora\nlinux-aurora\nlinux-aurora-headers\ngrub' ]] || {
   echo "not ok - the base list was not rewritten to the Aurora kernel"
   printf '%s\n' "$filtered"
   exit 1
