@@ -138,7 +138,7 @@ def open_installer(
     # cannot replace that conflicting provider.
     base_packages = None
     if "linux-aurora" in arch_config.kernels:
-        base_packages = ["base", "sudo", "linux-firmware", "mkinitcpio", "m1n1-aurora"]
+        base_packages = ["base", "sudo", "linux-firmware", "mkinitcpio", "m1n1-aurora", "uboot-asahi"]
     with Installer(
         mountpoint,
         arch_config.disk_config,
