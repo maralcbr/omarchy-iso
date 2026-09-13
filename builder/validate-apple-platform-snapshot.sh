@@ -11,6 +11,9 @@ jq -e --argjson expected_packages "$expected_packages" '
   .source.repository == "asahi-alarm/asahi-alarm" and
   .source.release_tag == "aarch64" and
   .source.tag_is_mutable == true and
+  ((has("artifact_base_url") | not) or
+    (.artifact_base_url | type == "string" and
+      test("^https://github.com/maralcbr/omarchy-pkgs/releases/download/asahi-platform-snapshot-[0-9]{8}$"))) and
   .target == {architecture: "aarch64", platform: "apple-silicon", boot_backend: "asahi-grub"} and
   (.trust.signing_fingerprint | test("^[0-9A-F]{40}$")) and
   (.trust.keyring.sha256 | hash) and

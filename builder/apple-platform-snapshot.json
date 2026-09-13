@@ -143,5 +143,6 @@
       "machine-firmware-handoff-unimplemented",
       "bootaa64-assembly-unverified"
     ]
-  }
+  },
+  "artifact_base_url": "https://github.com/maralcbr/omarchy-pkgs/releases/download/asahi-platform-snapshot-20260910"
 }

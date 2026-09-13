@@ -12,6 +12,18 @@ trap 'rm -rf "$work"' EXIT
 "$validator" "$snapshot" | grep -Fxq \
   'Apple platform package snapshot is valid but media remains blocked'
 
+# Archived artifacts retain the upstream identity and signatures, but only the
+# immutable platform snapshot namespace may replace the mutable download base.
+jq '.artifact_base_url = "https://github.com/maralcbr/omarchy-pkgs/releases/download/asahi-platform-snapshot-20260910"' "$snapshot" >"$work/archived.json"
+"$validator" "$work/archived.json" >/dev/null
+for bad_base in "http://github.com/maralcbr/omarchy-pkgs/releases/download/asahi-platform-snapshot-20260910" "https://example.com/packages"; do
+  jq --arg base "$bad_base" '.artifact_base_url = $base' "$snapshot" >"$work/bad-archive.json"
+  if "$validator" "$work/bad-archive.json" >/dev/null 2>&1; then
+    echo "Apple platform snapshot accepted an unapproved archive URL" >&2
+    exit 1
+  fi
+done
+
 jq '.target.boot_backend = "limine"' "$snapshot" >"$work/limine.json"
 if "$validator" "$work/limine.json" >/dev/null 2>&1; then
   echo "Apple platform snapshot accepted Limine" >&2

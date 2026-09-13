@@ -5,7 +5,10 @@ set -euo pipefail
 destination=${1:?Usage: fetch-apple-platform-snapshot.sh DESTINATION}
 builder_root=${BUILDER_ROOT:-/builder}
 snapshot=${APPLE_PLATFORM_SNAPSHOT:-$builder_root/apple-platform-snapshot.json}
-release_base=https://github.com/asahi-alarm/asahi-alarm/releases/download/aarch64
+# Pinned vendor artifacts may be archived after the mutable upstream release
+# removes them. The validator restricts archives; hashes and signatures still apply.
+release_base=$(jq -r \
+  '.artifact_base_url // "https://github.com/asahi-alarm/asahi-alarm/releases/download/aarch64"' "$snapshot")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
