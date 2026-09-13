@@ -166,7 +166,8 @@
       "runtime_inputs": [],
       "runtime_settings": [
         "OMARCHY_ARTIFACT_KIND",
-        "OMARCHY_MEDIA_TARGET"
+        "OMARCHY_MEDIA_TARGET",
+        "SOURCE_DATE_EPOCH"
       ],
       "entrypoints": [
         "builder/checkpoint-offline-repository-database.sh"

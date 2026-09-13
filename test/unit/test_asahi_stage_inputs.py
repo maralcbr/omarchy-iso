@@ -197,7 +197,22 @@ class AsahiStageInputTests(unittest.TestCase):
                     misses=downstream_misses,
                 )
 
-    def test_source_date_epoch_is_finalized_only_runtime_identity(self) -> None:
+    def test_repository_epoch_changes_runtime_identity(self) -> None:
+        declaration = self.specification["stages"]["offline-repository-database"]
+        self.assertIn("SOURCE_DATE_EPOCH", declaration["runtime_settings"])
+        with tempfile.TemporaryDirectory() as temporary:
+            settings = {name: f"value-for-{name}" for name in declaration["runtime_settings"]}
+            digests = []
+            for epoch in ("1789299685", "1789300516"):
+                settings["SOURCE_DATE_EPOCH"] = epoch
+                manifest = self.module.build_stage_runtime_manifest(
+                    root=Path(temporary), stage="offline-repository-database",
+                    declaration=declaration, settings=settings,
+                )
+                digests.append(manifest["input_digest"])
+            self.assertNotEqual(*digests)
+
+    def test_source_date_epoch_changes_finalized_runtime_identity(self) -> None:
         configured = self.specification["stages"]["configured-target"]
         finalized = self.specification["stages"]["finalized-boot"]
         self.assertNotIn("SOURCE_DATE_EPOCH", configured["runtime_settings"])
