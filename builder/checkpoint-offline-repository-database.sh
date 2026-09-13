@@ -87,6 +87,7 @@ prepare_offline_repository_runtime_manifest() {
     --stage offline-repository-database \
     --setting "OMARCHY_ARTIFACT_KIND=$OMARCHY_ARTIFACT_KIND" \
     --setting "OMARCHY_MEDIA_TARGET=$OMARCHY_MEDIA_TARGET" \
+    --setting "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:?repository normalization requires an epoch}" \
     --output "$offline_repository_runtime_manifest"
   [[ -f $offline_repository_runtime_manifest &&
     ! -L $offline_repository_runtime_manifest ]] || {

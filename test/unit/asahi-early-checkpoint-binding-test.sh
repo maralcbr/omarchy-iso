@@ -52,7 +52,8 @@ python3 "$ROOT/builder/asahi_stage_inputs.py" generate \
 jq -e '
   .stages["offline-repository-database"].runtime_settings == [
     "OMARCHY_ARTIFACT_KIND",
-    "OMARCHY_MEDIA_TARGET"
+    "OMARCHY_MEDIA_TARGET",
+    "SOURCE_DATE_EPOCH"
   ]
 ' "$ROOT/builder/asahi-stage-inputs.json" >/dev/null
 
@@ -95,7 +96,8 @@ jq -e --arg declaration_sha256 "$expected_declaration_sha256" '
   ] and
   .declaration.runtime_settings == [
     "OMARCHY_ARTIFACT_KIND",
-    "OMARCHY_MEDIA_TARGET"
+    "OMARCHY_MEDIA_TARGET",
+    "SOURCE_DATE_EPOCH"
   ] and
   .declaration.depends_on == ["verified-package-cache"]
 ' "$database_source_manifest" >/dev/null
