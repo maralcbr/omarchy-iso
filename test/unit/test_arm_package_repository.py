@@ -10,12 +10,21 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "configs/airootfs/usr/share/omarchy-iso"))
+MEDIA_SOURCE = ROOT / "configs/airootfs/usr/share/omarchy-iso"
+sys.path.insert(0, str(MEDIA_SOURCE))
 sys.modules.setdefault(
     "orchestrator.archinstall_adapter", types.ModuleType("orchestrator.archinstall_adapter")
 )
 
 from orchestrator import phases_impl  # noqa: E402
+
+
+def _context(target: Path, kernel: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        target=target,
+        omarchy_install={"storage": {"kernel": kernel}},
+        user_configuration={"kernels": [kernel]},
+    )
 
 
 class ArmPackageRepositoryTest(unittest.TestCase):
@@ -26,10 +35,25 @@ class ArmPackageRepositoryTest(unittest.TestCase):
         self.target = self.root / "target"
         self.media.mkdir()
         (self.target / "etc").mkdir(parents=True)
-        self.ctx = SimpleNamespace(target=self.target)
+        self.ctx = _context(self.target, "linux-asahi")
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    def write_media(self, *, aurora_config: str | None) -> None:
+        inputs = {
+            "arm-repository": "repository record\n",
+            "arm-runtime": "runtime record\n",
+            "arm-runtime-channel": "format=1\nsequence=7\ntag=asahi-quattro-dddddddd\n",
+            "pacman-online-installed-arm.conf": (
+                MEDIA_SOURCE / "pacman-online-installed-arm.conf"
+            ).read_text(),
+            "omarchy-arm-repository.asc": "public key\n",
+        }
+        if aurora_config is not None:
+            inputs["pacman-online-installed-arm-aurora.conf"] = aurora_config
+        for name, content in inputs.items():
+            (self.media / name).write_text(content)
 
     def test_non_arm_media_leaves_target_unchanged(self) -> None:
         with patch.dict(os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}), patch(
@@ -99,6 +123,132 @@ class ArmPackageRepositoryTest(unittest.TestCase):
         with patch.dict(os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}):
             with self.assertRaisesRegex(RuntimeError, "ARM package input is missing"):
                 phases_impl.configure_arm_package_repository(self.ctx)
+
+    def test_asahi_install_keeps_the_generic_configuration(self) -> None:
+        # The stage projection carries both tracked files into every media root.
+        self.write_media(
+            aurora_config=(MEDIA_SOURCE / "pacman-online-installed-arm-aurora.conf").read_text()
+        )
+
+        with patch.dict(os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}), patch(
+            "subprocess.run"
+        ):
+            phases_impl.configure_arm_package_repository(self.ctx)
+
+        self.assertEqual(
+            (self.target / "etc/pacman.conf").read_bytes(),
+            (MEDIA_SOURCE / "pacman-online-installed-arm.conf").read_bytes(),
+        )
+
+    def test_aurora_install_keeps_the_aurora_repository(self) -> None:
+        aurora_config = (MEDIA_SOURCE / "pacman-online-installed-arm-aurora.conf").read_text()
+        self.write_media(aurora_config=aurora_config)
+        contexts = {
+            "storage intent only": SimpleNamespace(
+                target=self.target,
+                omarchy_install={"storage": {"kernel": "linux-aurora"}},
+                user_configuration={},
+            ),
+            "configured kernels only": SimpleNamespace(
+                target=self.target,
+                omarchy_install={},
+                user_configuration={"kernels": ["linux-aurora"]},
+            ),
+            "mixed kernels": SimpleNamespace(
+                target=self.target,
+                omarchy_install={"storage": {"kernel": "linux-asahi"}},
+                user_configuration={"kernels": ["linux-asahi", "linux-aurora"]},
+            ),
+        }
+        for name, ctx in contexts.items():
+            with self.subTest(kernel_source=name):
+                (self.target / "etc/pacman.conf").unlink(missing_ok=True)
+                with patch.dict(
+                    os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}
+                ), patch("subprocess.run"):
+                    phases_impl.configure_arm_package_repository(ctx)
+
+                installed = (self.target / "etc/pacman.conf").read_text()
+                self.assertEqual(installed, aurora_config)
+                self.assertLess(
+                    installed.index("[omarchy-aurora]\n"), installed.index("[omarchy]\n")
+                )
+
+    def test_install_without_kernel_intent_keeps_the_generic_configuration(self) -> None:
+        self.write_media(
+            aurora_config=(MEDIA_SOURCE / "pacman-online-installed-arm-aurora.conf").read_text()
+        )
+        ctx = SimpleNamespace(target=self.target, omarchy_install={}, user_configuration={})
+
+        with patch.dict(os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}), patch(
+            "subprocess.run"
+        ):
+            phases_impl.configure_arm_package_repository(ctx)
+
+        self.assertEqual(
+            (self.target / "etc/pacman.conf").read_bytes(),
+            (MEDIA_SOURCE / "pacman-online-installed-arm.conf").read_bytes(),
+        )
+
+    def test_contradictory_aurora_intent_fails_closed(self) -> None:
+        self.write_media(
+            aurora_config=(MEDIA_SOURCE / "pacman-online-installed-arm-aurora.conf").read_text()
+        )
+        ctx = SimpleNamespace(
+            target=self.target,
+            omarchy_install={"storage": {"kernel": "linux-aurora"}},
+            user_configuration={"kernels": ["linux-asahi"]},
+        )
+
+        with patch.dict(os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}), patch(
+            "subprocess.run"
+        ) as run:
+            with self.assertRaisesRegex(RuntimeError, "configured kernels"):
+                phases_impl.configure_arm_package_repository(ctx)
+
+        run.assert_not_called()
+        self.assertFalse((self.target / "etc/pacman.conf").exists())
+
+    def test_aurora_install_without_aurora_configuration_fails_closed(self) -> None:
+        self.write_media(aurora_config=None)
+
+        with patch.dict(os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}), patch(
+            "subprocess.run"
+        ) as run:
+            with self.assertRaisesRegex(RuntimeError, "Aurora package input is missing"):
+                phases_impl.configure_arm_package_repository(
+                    _context(self.target, "linux-aurora")
+                )
+
+        run.assert_not_called()
+        self.assertFalse((self.target / "etc/pacman.conf").exists())
+
+    def test_aurora_install_rejects_a_configuration_without_its_repository_first(self) -> None:
+        aurora_config = (MEDIA_SOURCE / "pacman-online-installed-arm-aurora.conf").read_text()
+        aurora_section = aurora_config[
+            aurora_config.index("[omarchy-aurora]\n") : aurora_config.index("[omarchy]\n")
+        ]
+        generic = (MEDIA_SOURCE / "pacman-online-installed-arm.conf").read_text()
+        cases = {
+            "generic configuration": generic,
+            "behind omarchy": aurora_config.replace(aurora_section, "") + "\n" + aurora_section,
+            "plain http": aurora_config.replace(
+                "Server = https://github.com/maralcbr/omarchy-pkgs/releases/download/aurora-",
+                "Server = http://github.com/maralcbr/omarchy-pkgs/releases/download/aurora-",
+            ),
+        }
+        for name, content in cases.items():
+            with self.subTest(case=name):
+                self.write_media(aurora_config=content)
+                with patch.dict(
+                    os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}
+                ), patch("subprocess.run") as run:
+                    with self.assertRaisesRegex(RuntimeError, r"\[omarchy-aurora\]"):
+                        phases_impl.configure_arm_package_repository(
+                            _context(self.target, "linux-aurora")
+                        )
+                run.assert_not_called()
+                self.assertFalse((self.target / "etc/pacman.conf").exists())
 
 
 if __name__ == "__main__":

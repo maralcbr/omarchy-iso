@@ -200,6 +200,16 @@ mkdir -p "$fixture/root/var/lib/pacman/local/linux-aurora-1.0-1"
 sed -i 's/linux-asahi/linux-aurora/g' "$fixture/boot/grub/grub.cfg"
 mv "$fixture/boot/vmlinuz-linux-asahi" "$fixture/boot/vmlinuz-linux-aurora"
 mv "$fixture/boot/initramfs-linux-asahi.img" "$fixture/boot/initramfs-linux-aurora.img"
+# The generic configuration strands an Aurora install without kernel updates.
+if python3 "$VERIFIER" --root-tree "$fixture/root" --boot-tree "$fixture/boot" \
+  --kernel linux-aurora >"$work/aurora-generic-pacman.json" 2>/dev/null; then
+  echo "not ok - an Aurora tree without [omarchy-aurora] must fail" >&2
+  exit 1
+fi
+jq -e '.failed_checks == ["pacman-aurora-repository"]' \
+  "$work/aurora-generic-pacman.json" >/dev/null
+sed -i 's|^\[omarchy\]$|[omarchy-aurora]\nServer = https://github.com/maralcbr/omarchy-pkgs/releases/download/aurora-packages-1c5e34c9\n\n[omarchy]|' \
+  "$fixture/root/etc/pacman.conf"
 python3 "$VERIFIER" --root-tree "$fixture/root" --boot-tree "$fixture/boot" \
   --kernel linux-aurora >"$work/aurora.json" 2>"$work/aurora.json.err"
 jq -e '.result == "passed" and (.failed_checks | length) == 0' "$work/aurora.json" >/dev/null

@@ -113,4 +113,32 @@ pinned_release=$(sed -n 's/^AURORA_REPOSITORY_RELEASE=//p' \
   exit 1
 }
 
+# The builder refuses an Aurora payload whose installed configuration would
+# leave the machine unable to receive Aurora kernel updates.
+# shellcheck source=/dev/null
+source "$ROOT/builder/asahi-stages/finalized-runtime-inputs.sh"
+asahi_conf=$ROOT/configs/airootfs/usr/share/omarchy-iso/pacman-online-installed-arm.conf
+validate_installed_arm_pacman_config "$aurora_conf" linux-aurora 2>/dev/null || {
+  echo "not ok - the tracked aurora pacman configuration is rejected"; exit 1
+}
+validate_installed_arm_pacman_config "$asahi_conf" linux-asahi 2>/dev/null || {
+  echo "not ok - the tracked asahi pacman configuration is rejected"; exit 1
+}
+if validate_installed_arm_pacman_config "$asahi_conf" linux-aurora 2>/dev/null; then
+  echo "not ok - an Aurora build accepted a configuration without [omarchy-aurora]"; exit 1
+fi
+{
+  sed '/^\[omarchy-aurora\]$/,/^$/d' "$aurora_conf"
+  printf '\n[omarchy-aurora]\nServer = https://github.com/maralcbr/omarchy-pkgs/releases/download/%s\n' \
+    "$pinned_release"
+} >"$work/aurora-behind-omarchy.conf"
+if validate_installed_arm_pacman_config "$work/aurora-behind-omarchy.conf" linux-aurora 2>/dev/null; then
+  echo "not ok - an Aurora build accepted [omarchy-aurora] behind [omarchy]"; exit 1
+fi
+sed 's#^Server = https://\(.*/aurora-packages-\)#Server = http://\1#' "$aurora_conf" \
+  >"$work/aurora-plain-http.conf"
+if validate_installed_arm_pacman_config "$work/aurora-plain-http.conf" linux-aurora 2>/dev/null; then
+  echo "not ok - an Aurora build accepted [omarchy-aurora] without an https server"; exit 1
+fi
+
 echo 'ok - the aurora product selects the Aurora kernel and leaves the Asahi lane alone'
