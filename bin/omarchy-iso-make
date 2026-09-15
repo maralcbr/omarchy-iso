@@ -653,7 +653,10 @@ receipt_path.write_bytes(canonical(receipt))
 os.chmod(receipt_path, 0o444)
 PYTHON
 
-  OMARCHY_ASAHI_CHECKPOINT_ROOT=${OMARCHY_ASAHI_CHECKPOINT_ROOT:-$ASAHI_CACHE_BASE/asahi-checkpoints}
+  asahi_checkpoint_scope="asahi-checkpoints"
+  [[ ${OMARCHY_ASAHI_PRODUCT_NAME:-omarchy-mx-mac} == "omarchy-mx-mac" ]] ||
+    asahi_checkpoint_scope+="-${OMARCHY_ASAHI_PRODUCT_NAME}"
+  OMARCHY_ASAHI_CHECKPOINT_ROOT=${OMARCHY_ASAHI_CHECKPOINT_ROOT:-$ASAHI_CACHE_BASE/$asahi_checkpoint_scope}
   OMARCHY_ASAHI_NODE_CACHE=${OMARCHY_ASAHI_NODE_CACHE:-$ASAHI_CACHE_BASE/asahi-node}
   for persistent_directory in \
     "$OMARCHY_ASAHI_CHECKPOINT_ROOT" "$OMARCHY_ASAHI_NODE_CACHE"; do
@@ -857,6 +860,10 @@ if [[ -z "$NO_CACHE" ]]; then
   cache_scope="iso_${OMARCHY_MIRROR}"
   [[ $OMARCHY_ARCH == "x86_64" ]] || cache_scope+="_${OMARCHY_ARCH}"
   [[ $OMARCHY_MEDIA_TARGET != "aarch64/apple-silicon" ]] || cache_scope+="_apple_silicon"
+  # Products pin different kernels and package snapshots, so they must not
+  # share an offline mirror either.
+  [[ ${OMARCHY_ASAHI_PRODUCT_NAME:-omarchy-mx-mac} == "omarchy-mx-mac" ]] ||
+    cache_scope+="_${OMARCHY_ASAHI_PRODUCT_NAME}"
   cache_base=${ASAHI_CACHE_BASE:-${XDG_CACHE_HOME:-$HOME/.cache}/omarchy}
   OFFLINE_REPO_BUILD_CACHE_DIR="$cache_base/$cache_scope/airootfs/var/cache/omarchy"
   if (( asahi_full_os_package )); then
