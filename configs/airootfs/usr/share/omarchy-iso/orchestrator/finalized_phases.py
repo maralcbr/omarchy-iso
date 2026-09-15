@@ -474,25 +474,71 @@ def configure_dns_resolver(ctx: InstallContext) -> None:
     resolv_conf.symlink_to(target)
 
 
+AURORA_KERNEL_PACKAGE = "linux-aurora"
+
+
+def _installed_arm_pacman_config(ctx: InstallContext, media_root: Path) -> Path:
+    """Choose the pacman configuration the installed system keeps.
+
+    An Aurora install must keep [omarchy-aurora] ahead of [omarchy], or pacman
+    never delivers another Aurora kernel or m1n1. Choose by the kernel the
+    install names: the product manifest already binds it into the stage
+    identity and both tracked configurations are declared stage sources, so
+    the choice adds no unhashed input. Never fall back to the generic file.
+    """
+    storage_kernel = _storage_intent(ctx).get("kernel")
+    kernels = {storage_kernel, *(ctx.user_configuration.get("kernels") or [])}
+    if AURORA_KERNEL_PACKAGE not in kernels:
+        config = media_root / "pacman-online-installed-arm.conf"
+        if not config.is_file():
+            raise RuntimeError(f"ARM package input is missing: {config}")
+        return config
+
+    config = media_root / "pacman-online-installed-arm-aurora.conf"
+    if not config.is_file():
+        raise RuntimeError(f"Aurora package input is missing: {config}")
+    sections: list[str] = []
+    aurora_servers: list[str] = []
+    for line in config.read_text().splitlines():
+        stripped = line.strip()
+        match = re.fullmatch(r"\[([^]]+)\]", stripped)
+        if match:
+            sections.append(match.group(1))
+        elif sections and sections[-1] == "omarchy-aurora" and stripped.startswith("Server = "):
+            aurora_servers.append(stripped)
+    if (
+        "omarchy-aurora" not in sections
+        or "omarchy" not in sections
+        or sections.index("omarchy-aurora") > sections.index("omarchy")
+        or not any(server.startswith("Server = https://") for server in aurora_servers)
+    ):
+        raise RuntimeError(
+            f"Aurora pacman configuration must list [omarchy-aurora] with an https "
+            f"server before [omarchy]: {config}"
+        )
+    return config
+
+
 def configure_arm_package_repository(ctx: InstallContext) -> None:
     """Keep a generic ARM install on its verified ARM package inputs.
 
     The normal Omarchy finalizer installs the default x86_64 online pacman
     configuration. An ARM ISO carries this marker and replacement explicitly;
-    x86_64 media has neither and returns without changing the target.
+    x86_64 media has neither and returns without changing the target. An
+    Aurora install keeps the Aurora configuration instead of the generic one.
     """
     media_root = Path(os.environ.get("OMARCHY_ISO_MEDIA_ROOT", "/usr/share/omarchy-iso"))
     repository_record = media_root / "arm-repository"
     runtime_record = media_root / "arm-runtime"
     channel_record = media_root / "arm-runtime-channel"
-    pacman_config = media_root / "pacman-online-installed-arm.conf"
     public_key = media_root / "omarchy-arm-repository.asc"
 
     if not repository_record.exists():
         return
-    for required in (runtime_record, channel_record, pacman_config, public_key):
+    for required in (runtime_record, channel_record, public_key):
         if not required.is_file():
             raise RuntimeError(f"ARM package input is missing: {required}")
+    pacman_config = _installed_arm_pacman_config(ctx, media_root)
 
     target_state = ctx.target / "var/lib/omarchy/package-snapshots"
     target_state.mkdir(parents=True, exist_ok=True)

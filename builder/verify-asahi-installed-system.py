@@ -7,6 +7,8 @@ Every check here corresponds to a way a built image installed fine but broke
 on first use:
 
 - /etc/pacman.conf missing [asahi-alarm] broke omarchy-update-asahi-bundle;
+- an Aurora /etc/pacman.conf without [omarchy-aurora] first never received
+  an Aurora kernel update;
 - speakersafetyd.service left disabled keeps the built-in speakers silent;
 - bluetooth.service left disabled leaves Bluetooth off;
 - a builder-local GRUB root selector failed Switch Root on first boot.
@@ -79,7 +81,7 @@ def parse_pacman_sections(text: str) -> dict[str, list[str]]:
     return sections
 
 
-def check_pacman(verification: Verification, root: Path) -> None:
+def check_pacman(verification: Verification, root: Path, kernel: str) -> None:
     config = root / "etc/pacman.conf"
     if not config.is_file():
         verification.record("pacman-conf-present", False, "/etc/pacman.conf is missing")
@@ -122,6 +124,26 @@ def check_pacman(verification: Verification, root: Path) -> None:
         "pacman-architecture",
         bool(architecture) and architecture.group(1) == "aarch64",
         architecture.group(0) if architecture else "no Architecture line",
+    )
+
+    if kernel != "linux-aurora":
+        return
+    order = list(sections)
+    aurora_servers = [
+        line for line in sections.get("omarchy-aurora", []) if line.startswith("Server =")
+    ]
+    aurora_first = (
+        "omarchy-aurora" in sections
+        and "omarchy" in sections
+        and order.index("omarchy-aurora") < order.index("omarchy")
+    )
+    aurora_https = any(line.startswith("Server = https://") for line in aurora_servers)
+    verification.record(
+        "pacman-aurora-repository",
+        aurora_first and aurora_https,
+        aurora_servers[0]
+        if aurora_first and aurora_https
+        else "[omarchy-aurora] with an https server must precede [omarchy]",
     )
 
 
@@ -308,7 +330,7 @@ def main() -> int:
         return 2
 
     verification = Verification()
-    check_pacman(verification, arguments.root_tree)
+    check_pacman(verification, arguments.root_tree, arguments.kernel)
     check_network(verification, arguments.root_tree)
     check_enabled_units(verification, arguments.root_tree)
     check_packages(verification, arguments.root_tree, arguments.kernel)
