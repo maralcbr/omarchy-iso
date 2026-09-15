@@ -144,11 +144,20 @@ class ArmPackageRepositoryTest(unittest.TestCase):
         aurora_config = (MEDIA_SOURCE / "pacman-online-installed-arm-aurora.conf").read_text()
         self.write_media(aurora_config=aurora_config)
         contexts = {
-            "storage intent": _context(self.target, "linux-aurora"),
-            "configured kernels": SimpleNamespace(
+            "storage intent only": SimpleNamespace(
+                target=self.target,
+                omarchy_install={"storage": {"kernel": "linux-aurora"}},
+                user_configuration={},
+            ),
+            "configured kernels only": SimpleNamespace(
                 target=self.target,
                 omarchy_install={},
                 user_configuration={"kernels": ["linux-aurora"]},
+            ),
+            "mixed kernels": SimpleNamespace(
+                target=self.target,
+                omarchy_install={"storage": {"kernel": "linux-asahi"}},
+                user_configuration={"kernels": ["linux-asahi", "linux-aurora"]},
             ),
         }
         for name, ctx in contexts.items():
@@ -164,6 +173,41 @@ class ArmPackageRepositoryTest(unittest.TestCase):
                 self.assertLess(
                     installed.index("[omarchy-aurora]\n"), installed.index("[omarchy]\n")
                 )
+
+    def test_install_without_kernel_intent_keeps_the_generic_configuration(self) -> None:
+        self.write_media(
+            aurora_config=(MEDIA_SOURCE / "pacman-online-installed-arm-aurora.conf").read_text()
+        )
+        ctx = SimpleNamespace(target=self.target, omarchy_install={}, user_configuration={})
+
+        with patch.dict(os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}), patch(
+            "subprocess.run"
+        ):
+            phases_impl.configure_arm_package_repository(ctx)
+
+        self.assertEqual(
+            (self.target / "etc/pacman.conf").read_bytes(),
+            (MEDIA_SOURCE / "pacman-online-installed-arm.conf").read_bytes(),
+        )
+
+    def test_contradictory_aurora_intent_fails_closed(self) -> None:
+        self.write_media(
+            aurora_config=(MEDIA_SOURCE / "pacman-online-installed-arm-aurora.conf").read_text()
+        )
+        ctx = SimpleNamespace(
+            target=self.target,
+            omarchy_install={"storage": {"kernel": "linux-aurora"}},
+            user_configuration={"kernels": ["linux-asahi"]},
+        )
+
+        with patch.dict(os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}), patch(
+            "subprocess.run"
+        ) as run:
+            with self.assertRaisesRegex(RuntimeError, "configured kernels"):
+                phases_impl.configure_arm_package_repository(ctx)
+
+        run.assert_not_called()
+        self.assertFalse((self.target / "etc/pacman.conf").exists())
 
     def test_aurora_install_without_aurora_configuration_fails_closed(self) -> None:
         self.write_media(aurora_config=None)

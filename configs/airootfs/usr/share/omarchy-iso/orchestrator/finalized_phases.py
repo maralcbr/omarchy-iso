@@ -487,7 +487,19 @@ def _installed_arm_pacman_config(ctx: InstallContext, media_root: Path) -> Path:
     the choice adds no unhashed input. Never fall back to the generic file.
     """
     storage_kernel = _storage_intent(ctx).get("kernel")
-    kernels = {storage_kernel, *(ctx.user_configuration.get("kernels") or [])}
+    configured_kernels = ctx.user_configuration.get("kernels") or []
+    # The bootstrap provider follows the configured kernels, so an Aurora
+    # storage kernel they omit would pair Aurora repositories with upstream m1n1.
+    if (
+        storage_kernel == AURORA_KERNEL_PACKAGE
+        and configured_kernels
+        and AURORA_KERNEL_PACKAGE not in configured_kernels
+    ):
+        raise RuntimeError(
+            f"install intent names {AURORA_KERNEL_PACKAGE} for storage but not in "
+            f"its configured kernels: {configured_kernels}"
+        )
+    kernels = {storage_kernel, *configured_kernels}
     if AURORA_KERNEL_PACKAGE not in kernels:
         config = media_root / "pacman-online-installed-arm.conf"
         if not config.is_file():
