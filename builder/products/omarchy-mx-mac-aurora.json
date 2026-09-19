@@ -8,7 +8,7 @@
   "esp_volume_id": "0x4f4d5801",
   "boot_size_bytes": 2147483648,
   "boot_filesystem_uuid": "4f4d5801-424f-4f54-8000-000000000001",
-  "root_size_bytes": 34359738368,
+  "root_size_bytes": 17179869184,
   "root_filesystem_uuid": "4f4d5801-524f-4f54-8000-000000000001",
   "boot_backend": "asahi-grub",
   "branding": {

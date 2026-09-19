@@ -55,7 +55,7 @@
       "release_compression": true,
       "esp_size_bytes": 524288000,
       "boot_size_bytes": 2147483648,
-      "root_size_bytes": 34359738368,
+      "root_size_bytes": 17179869184,
       "required_verification": [
         "complete-package-verifier",
         "installed-content-evidence",
