@@ -331,7 +331,7 @@ prepare_verified_package_cache() {
     printf '%s\n' archlinuxarm-keyring >>"$shipped_base_packages"
   fi
   if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon ]]; then
-    printf '%s\n' alsa-ucm-conf-asahi asahi-alarm-keyring asahi-audio asahi-bless asahi-fwextract asahi-scripts grub "${ASAHI_KERNEL_PACKAGE:-linux-asahi}" "${ASAHI_KERNEL_PACKAGE:-linux-asahi}-headers" m1n1 speakersafetyd startup-disk uboot-asahi >>"$shipped_base_packages"
+    printf '%s\n' alsa-ucm-conf-asahi asahi-alarm-keyring asahi-audio asahi-bless asahi-fwextract asahi-scripts grub "${ASAHI_KERNEL_PACKAGE:-linux-asahi}" "${ASAHI_KERNEL_PACKAGE:-linux-asahi}-headers" m1n1 rtkit speakersafetyd startup-disk uboot-asahi >>"$shipped_base_packages"
     sort -u -o "$shipped_base_packages" "$shipped_base_packages"
   fi
   base_pkg_lists=("$shipped_base_packages" "$shipped_other_packages")
