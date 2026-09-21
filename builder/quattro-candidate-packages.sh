@@ -32,10 +32,12 @@ prepare_quattro_candidate_packages() {
     print ""
   } {print}' "$PACMAN_ONLINE_CONFIG" >/tmp/pacman-quattro-candidates.conf
   PACMAN_ONLINE_CONFIG=/tmp/pacman-quattro-candidates.conf
-  local evidence=/out/build-evidence/$OMARCHY_BUILD_RUN_ID/candidate-inputs
+  local evidence=/out/build-evidence/$OMARCHY_BUILD_RUN_ID
   mkdir -p "$evidence"
-  cp "$verified/signing.json" "$verified/signing.json.sig" \
-    "$verified/manifest.json" "$verified/manifest.json.sig" "$evidence/"
+  # The full image driver admits flat, phase-owned early evidence only.
+  for filename in signing.json signing.json.sig manifest.json manifest.json.sig; do
+    cp "$verified/$filename" "$evidence/verified-package-cache.candidate-$filename"
+  done
 }
 
 verify_quattro_candidate_selection() {
