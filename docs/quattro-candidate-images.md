@@ -59,3 +59,13 @@ The isolated image-builder branch is `integrate/quattro-candidate-inputs`. Nothi
 Review the separate Snapper fix, include it in the protected desktop branch, and let the candidate workflow produce a new signed set. Record the new source SHA and receipt hash, then repeat the short transaction and diagnostic image commands with the same persistent cache and `SOURCE_DATE_EPOCH=1789301403`. Only after target configuration and boot-file validation pass should the development catalog and macOS installer consumption be wired up for a physical test.
 
 On this Linux Docker host the first loop attachment reported a missing `/dev/loop0`; a fresh container subsequently exposed the kernel’s loop nodes and an isolated attach/detach probe passed. The next diagnostic run successfully created and mounted the image. This was an environment startup issue, not evidence that physical boot works.
+
+## Post-merge check: 2026-09-21
+
+PRs omacom/omarchy-mac#493 and #494 are merged in desktop revision `1c595bb6030c487c0b584f3e192ef9e8b858b821`. Candidate workflow run `35639858283` built and signed all three packages successfully. Its receipt SHA256 is `b8b97d4f755039e16e0b848f0d4f47f8644c91866ae1fbeeb1e4eec153dfa65c`. Local signature validation passed, and inspection of the authenticated runtime archive confirmed the Snapper and both raw LUKS lookup fixes.
+
+The short transaction passed in run `20260921T190609Z-1975436` in 31 seconds, with exact installed versions and source markers. The subsequent diagnostic image again installed its full target package set and this time completed `install/config/snapper.sh`, proving the merged fix resolves the observed chroot blocker.
+
+Full image setup then failed in `install/login/grub-splash.sh`: it invokes `mkinitcpio -P` while the configured stage has deferred preset generation until boot finalization (`No presets found in /etc/mkinitcpio.d`). Apple audio setup also reported `target not found: rtkit` and an incomplete protected audio stack. Hardware setup fetched video-decoding packages through the installed online repository configuration, so complete offline hardware-package closure is not yet established either. Resolve the setup/finalization ordering and hardware dependency/repository inputs before another image qualification attempt; do not treat the package transaction as full image success.
+
+Logs: `/home/scott/code/omarchy-iso-worktrees/quattro-trial/package-check-35639858283.log` and `diagnostic-image-35639858283.log`. The failed image run cleaned up its container and file-backed loop devices. No physical install, dev-link change, image publication, or encrypted owner-setup test was performed.
