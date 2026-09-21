@@ -47,6 +47,11 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 mkdir -p "$destination"
+# Keep immutable downloads outside the pruned offline closure. Every reuse
+# still checks the signed descriptor's hash and a freshly verified signature.
+snapshot_cache="$destination.snapshot-cache"
+[[ ! -L $snapshot_cache ]]
+mkdir -p "$snapshot_cache"
 
 download() {
   local url="$1"
@@ -89,7 +94,16 @@ verify_package_record() {
   [[ $filename =~ ^[a-zA-Z0-9@._+-]+\.pkg\.tar\.(xz|zst)$ ]]
   [[ $checksum =~ ^[0-9a-f]{64}$ ]]
 
-  download "$repository_base/$release/$filename" "$work/$filename"
+  local cached
+  for cached in "$snapshot_cache/$checksum" "$destination/$filename"; do
+    if [[ -f $cached && ! -L $cached && $(sha256sum "$cached" | cut -d' ' -f1) == "$checksum" ]]; then
+      cp "$cached" "$work/$filename"
+      break
+    fi
+  done
+  if [[ ! -f $work/$filename ]]; then
+    download "$repository_base/$release/$filename" "$work/$filename"
+  fi
   [[ $(sha256sum "$work/$filename" | cut -d' ' -f1) == "$checksum" ]]
 
   signature=${signature:-$filename.sig}
@@ -103,6 +117,12 @@ verify_package_record() {
   verify_signature "$key" "$signature_path" "$work/$filename" "$signer" \
     "$gnupg_home"
 
+  # Do not persist unverified bytes, even if a download had the right name.
+  if [[ ! -f $snapshot_cache/$checksum || -L $snapshot_cache/$checksum ||
+    $(sha256sum "$snapshot_cache/$checksum" | cut -d' ' -f1) != "$checksum" ]]; then
+    rm -f "$snapshot_cache/$checksum"
+    install -m 0644 "$work/$filename" "$snapshot_cache/$checksum"
+  fi
   install -m 0644 "$work/$filename" "$destination/$filename"
   install -m 0644 "$signature_path" "$destination/$signature"
 }

@@ -126,6 +126,7 @@ while (( $# > 0 )); do
   esac
 done
 
+printf '%s\n' "$url" >>"$TEST_CURL_LOG"
 path=${url#*/download/}
 cp "$TEST_REMOTE/$path" "$output"
 STUB
@@ -139,6 +140,7 @@ STUB
 chmod +x "$stubs/curl" "$stubs/gpg"
 
 export TEST_REMOTE="$remote"
+export TEST_CURL_LOG="$work/downloads.log"
 export TEST_FINGERPRINT="$fingerprint"
 # The installed system must sync from the release these files come from.
 installed_conf="$work/pacman-online-installed-arm.conf"
@@ -155,6 +157,27 @@ package_count=$(find "$destination" -maxdepth 1 -type f -name '*.pkg.tar.*' ! -n
 # The seeded installed-state record names the pinned channel and both sources.
 diff <(printf 'format=1\nsequence=%s\ntag=%s\nsource_commit=%s\npackage_source_commit=%s\n' \
   "$channel_sequence" "$channel_tag" "$runtime_commit" "$source_commit") "$destination/ARM-RUNTIME-CHANNEL"
+
+# Pruning the install closure must not force immutable archives to download
+# again. Signatures and descriptors are still fetched and checked each time.
+rm -f "$destination"/*.pkg.tar.xz
+: >"$TEST_CURL_LOG"
+BUILDER_ROOT="$builder" INSTALLED_PACMAN_CONF="$installed_conf" PATH="$stubs:$PATH" \
+  bash "$ROOT/builder/fetch-arm-package-snapshots.sh" "$destination"
+if grep -Eq '\.pkg\.tar\.xz$' "$TEST_CURL_LOG"; then
+  echo "warm snapshot fetch downloaded a cached archive" >&2
+  exit 1
+fi
+grep -q '\.sig$' "$TEST_CURL_LOG"
+# A damaged cache entry cannot stand in for the exact pinned bytes.
+cached_checksum=$(sha256sum "$remote/$repository_release/repo-pkg-01-1-1-aarch64.pkg.tar.xz" | cut -d' ' -f1)
+printf 'damaged\n' >"$destination.snapshot-cache/$cached_checksum"
+printf 'damaged\n' >"$destination/repo-pkg-01-1-1-aarch64.pkg.tar.xz"
+: >"$TEST_CURL_LOG"
+BUILDER_ROOT="$builder" INSTALLED_PACMAN_CONF="$installed_conf" PATH="$stubs:$PATH" \
+  bash "$ROOT/builder/fetch-arm-package-snapshots.sh" "$destination"
+grep -q '/repo-pkg-01-1-1-aarch64.pkg.tar.xz$' "$TEST_CURL_LOG"
+[[ $(sha256sum "$destination.snapshot-cache/$cached_checksum" | cut -d' ' -f1) == "$cached_checksum" ]]
 
 # A channel whose record disagrees with the pinned runtime is refused.
 channel_file="$remote/asahi-quattro-channel-$channel_sequence/asahi-quattro-channel"
