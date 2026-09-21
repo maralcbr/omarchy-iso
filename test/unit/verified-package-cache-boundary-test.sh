@@ -18,9 +18,9 @@ for ((iteration = 0; iteration < 1000; iteration++)); do :; done
 elapsed=$(elapsed_epochrealtime_timer "$timer_started")
 [[ $elapsed =~ ^[0-9]+\.[0-9]{6}$ ]]
 (( 10#${elapsed/./} > 0 ))
-if /bin/bash -c "source '$stage_timing'; start_epochrealtime_timer started" \
+if /bin/bash -c "unset EPOCHREALTIME; source '$stage_timing'; start_epochrealtime_timer started" \
   >/dev/null 2>&1; then
-  echo "Apple Bash 3.2 unexpectedly passed the EPOCHREALTIME timer gate" >&2
+  echo "Missing EPOCHREALTIME unexpectedly passed the timer gate" >&2
   exit 1
 fi
 

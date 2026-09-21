@@ -22,6 +22,7 @@ toolchain_image="sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 source "$ROOT/builder/sha256-adapter.sh"
 
 mkdir -p "$work/bin" "$work/home"
+export XDG_CACHE_HOME="$work/home/.cache"
 
 cat >"$work/bin/docker" <<'STUB'
 #!/bin/bash

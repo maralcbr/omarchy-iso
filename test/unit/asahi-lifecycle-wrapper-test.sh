@@ -25,7 +25,7 @@ output=$( \
   OMARCHY_ASAHI_LIFECYCLE_LEASE_HELD=1 \
   XDG_CACHE_HOME="$work/home/cache" \
   SOURCE_DATE_EPOCH=0 \
-  /opt/homebrew/bin/bash "$ROOT/bin/omarchy-iso-make" \
+  "${OMARCHY_TEST_BASH:-$BASH}" "$ROOT/bin/omarchy-iso-make" \
     --target aarch64/apple-silicon \
     --artifact asahi-os-package \
     --local-source "$work/missing-omarchy" "$work/missing-pkgs" \
