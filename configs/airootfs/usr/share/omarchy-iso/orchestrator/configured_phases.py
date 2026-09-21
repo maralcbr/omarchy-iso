@@ -1421,7 +1421,65 @@ def _run_target_setup_command(ctx: InstallContext, cmd: list[str], *, user: str 
                 pass
 
 
+# Kernels that ship Apple device trees and boot through m1n1 + GRUB. The Aurora
+# kernel is the Asahi one with the Aurora Silicon patches, selected by product.
+_SUPPORTED_ASAHI_KERNELS = ("linux-asahi", "linux-aurora")
+
+
+def _asahi_kernel_source(ctx: InstallContext, kernel: str) -> Path:
+    matches = []
+    for pkgbase in sorted((ctx.target / "usr/lib/modules").glob("*/pkgbase")):
+        if pkgbase.read_text().strip() != kernel:
+            continue
+        source = pkgbase.parent / "vmlinuz"
+        if source.is_file() and source.stat().st_size:
+            matches.append(source)
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"expected one populated {kernel} kernel under /usr/lib/modules, "
+            f"found {len(matches)}"
+        )
+    return matches[0]
+
+
+def _stage_asahi_kernel_preset(
+    ctx: InstallContext,
+) -> tuple[str, Path]:
+    storage = _storage_intent(ctx)
+    kernel = storage.get("kernel") or (
+        ctx.user_configuration.get("kernels") or ["linux-asahi"]
+    )[0]
+    if kernel not in _SUPPORTED_ASAHI_KERNELS:
+        raise RuntimeError(f"Asahi GRUB requires an Apple Silicon kernel, got {kernel}")
+
+    boot_mount = storage.get("boot_mount", "/boot")
+    if boot_mount != "/boot":
+        raise RuntimeError(f"Asahi GRUB requires boot_mount=/boot, got {boot_mount}")
+
+    boot_dir = ctx.target / "boot"
+    boot_dir.mkdir(parents=True, exist_ok=True)
+    kernel_target = boot_dir / f"vmlinuz-{kernel}"
+    shutil.copy2(_asahi_kernel_source(ctx, kernel), kernel_target)
+
+    preset = ctx.target / "etc/mkinitcpio.d" / f"{kernel}.preset"
+    preset.parent.mkdir(parents=True, exist_ok=True)
+    preset.write_text(
+        f'ALL_kver="/boot/vmlinuz-{kernel}"\n'
+        "PRESETS=('default')\n"
+        f'default_image="/boot/initramfs-{kernel}.img"\n'
+    )
+
+    (boot_dir / "grub").mkdir(parents=True, exist_ok=True)
+    return kernel, kernel_target
+
+
 def run_system_finalizer(ctx: InstallContext) -> None:
+    # Package hooks were deferred during installation. Runtime setup can call
+    # mkinitcpio itself, so its kernel and preset must already exist. Boot
+    # finalization rebuilds again after all hardware configuration is written.
+    if _boot_backend(ctx) == "asahi-grub":
+        _stage_asahi_kernel_preset(ctx)
+
     if ctx.defer_provisioning:
         cmd = ["/usr/bin/omarchy-apply-system", "--defer-provisioning", "--first-install"]
     else:

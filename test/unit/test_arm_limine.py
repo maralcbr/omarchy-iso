@@ -20,6 +20,45 @@ from orchestrator import configured_phases, phases_impl  # noqa: E402
 
 
 class ArmLimineTest(unittest.TestCase):
+    def test_asahi_finalizer_has_kernel_preset_before_runtime_setup(self) -> None:
+        for kernel in ("linux-asahi", "linux-aurora"):
+            with self.subTest(kernel=kernel), tempfile.TemporaryDirectory() as tmp:
+                target = Path(tmp)
+                modules = target / "usr/lib/modules/7.1-test"
+                modules.mkdir(parents=True)
+                (modules / "pkgbase").write_text(kernel)
+                (modules / "vmlinuz").write_bytes(b"kernel payload")
+                ctx = SimpleNamespace(
+                    target=target, defer_provisioning=True,
+                    user_configuration={},
+                )
+
+                def setup(context, command):
+                    self.assertEqual((target / f"boot/vmlinuz-{kernel}").read_bytes(), b"kernel payload")
+                    preset = (target / f"etc/mkinitcpio.d/{kernel}.preset").read_text()
+                    self.assertIn(f'ALL_kver="/boot/vmlinuz-{kernel}"', preset)
+                    self.assertIn(f'default_image="/boot/initramfs-{kernel}.img"', preset)
+                    self.assertTrue((target / "boot/grub").is_dir())
+                    self.assertIn("--defer-provisioning", command)
+
+                with patch.object(configured_phases, "_boot_backend", return_value="asahi-grub"), \
+                     patch.object(configured_phases, "_storage_intent", return_value={"kernel": kernel}), \
+                     patch.object(configured_phases, "_mask_mkinitcpio_pacman_hooks"), \
+                     patch.object(configured_phases, "_unmask_mkinitcpio_pacman_hooks"), \
+                     patch.object(configured_phases, "_run_target_setup_command", side_effect=setup) as run:
+                    configured_phases.run_system_finalizer(ctx)
+                run.assert_called_once()
+
+    def test_asahi_missing_kernel_fails_before_runtime_setup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx = SimpleNamespace(target=Path(tmp), user_configuration={})
+            with patch.object(configured_phases, "_boot_backend", return_value="asahi-grub"), \
+                 patch.object(configured_phases, "_storage_intent", return_value={}), \
+                 patch.object(configured_phases, "_run_target_setup_command") as run:
+                with self.assertRaisesRegex(RuntimeError, "expected one populated linux-asahi"):
+                    configured_phases.run_system_finalizer(ctx)
+            run.assert_not_called()
+
     def test_pre_mounted_locale_is_generated_without_systemd_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp)
