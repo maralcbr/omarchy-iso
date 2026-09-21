@@ -169,7 +169,8 @@
         "builder/products/omarchy-mx-mac.json",
         "builder/products/omarchy-mx-mac-aurora.json",
         "configs/profiledef.sh",
-        "builder/quattro-package-install-check.sh"
+        "builder/quattro-package-install-check.sh",
+        "configs/pacman-offline.conf"
       ],
       "lock_paths": [
         "node"
