@@ -284,11 +284,21 @@ prepare_verified_package_cache() {
     local omarchy_pkg
     rm -rf "$bootstrap_cache_dir" /tmp/offlinedb-bootstrap /tmp/omarchy-pkglists
     mkdir -p "$bootstrap_cache_dir" /tmp/offlinedb-bootstrap
-    pacman --config "$PACMAN_ONLINE_CONFIG" --noconfirm -Syw "$OMARCHY_RUNTIME_PACKAGE" --cachedir "$bootstrap_cache_dir" --dbpath /tmp/offlinedb-bootstrap >/dev/null
-    omarchy_pkg=$(
-      find "$bootstrap_cache_dir" -maxdepth 1 -type f -name "$OMARCHY_RUNTIME_PACKAGE-*.pkg.tar.*" ! -name '*.sig' |
-        sort | head -1
-    )
+    if [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]]; then
+      # The importer already authenticated this exact archive. Reading its
+      # manifests must not download the runtime dependency closure into a
+      # temporary cache before downloading that same closure into the mirror.
+      local candidate_runtime_file
+      candidate_runtime_file=$(jq -er '.packages[] | select(.name == "omarchy") | .filename' \
+        /tmp/omarchy-quattro-verified/manifest.json)
+      omarchy_pkg=/tmp/omarchy-quattro-verified/$candidate_runtime_file
+    else
+      pacman --config "$PACMAN_ONLINE_CONFIG" --noconfirm -Syw "$OMARCHY_RUNTIME_PACKAGE" --cachedir "$bootstrap_cache_dir" --dbpath /tmp/offlinedb-bootstrap >/dev/null
+      omarchy_pkg=$(
+        find "$bootstrap_cache_dir" -maxdepth 1 -type f -name "$OMARCHY_RUNTIME_PACKAGE-*.pkg.tar.*" ! -name '*.sig' |
+          sort | head -1
+      )
+    fi
     if [[ -z $omarchy_pkg ]]; then
       echo "ERROR: downloaded package for $OMARCHY_RUNTIME_PACKAGE not found in $bootstrap_cache_dir" >&2
       return 1
