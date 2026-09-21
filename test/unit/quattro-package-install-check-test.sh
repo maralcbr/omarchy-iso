@@ -5,10 +5,11 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 source "$ROOT/builder/quattro-package-install-check.sh"
 # Redirect the evidence and disposable-root paths into this fixture.
-eval "$(declare -f run_quattro_package_install_check | sed "s|/out/build-evidence|$work/evidence|g")"
+eval "$(declare -f run_quattro_package_install_check | sed "s|/out/build-evidence|$work/evidence|g; s|/configs/pacman-offline.conf|$ROOT/configs/pacman-offline.conf|g")"
 OMARCHY_CANDIDATE_ROOT=$work/input
 OMARCHY_BUILD_MODE=diagnostic
 build_cache_dir=$work/cache
+offline_mirror_dir=$work/mirror
 HOST_UID=$(id -u); HOST_GID=$(id -g)
 mkdir -p "$OMARCHY_CANDIDATE_ROOT" "$build_cache_dir"
 cat >"$OMARCHY_CANDIDATE_ROOT/manifest.json" <<'JSON'
@@ -17,6 +18,8 @@ JSON
 mktemp() { mkdir -p "$work/root"; printf '%s\n' "$work/root"; }
 pacstrap() {
   [[ $1 == "-C" && $3 == "-G" && $4 == "-M" ]]
+  grep -Fxq 'DisableSandbox' "$2"
+  grep -Fxq "Server = file://$offline_mirror_dir" "$2"
   [[ ${*:6} == "base omarchy omarchy-settings omarchy-mac" ]]
   for name in omarchy omarchy-settings omarchy-mac; do
     path="usr/share/doc/$name/source-revision"

@@ -4,14 +4,23 @@
 # disposable directory root. No filesystem images, boot finalization or ZIP.
 run_quattro_package_install_check() {
   [[ -n ${OMARCHY_CANDIDATE_ROOT:-} && $OMARCHY_BUILD_MODE == "diagnostic" ]] || return 1
-  local target evidence started
+  local target evidence started pacman_config
   target=$(mktemp -d /var/tmp/quattro-package-root.XXXXXX)
   evidence=/out/build-evidence/$OMARCHY_BUILD_RUN_ID/package-install-check
   mkdir -p "$evidence"
   started=$SECONDS
+  # The short path stops before configured-runtime-inputs, which normally
+  # creates the offline config and mirror symlink. Use the verified mirror
+  # directly and scope Docker's downloader-sandbox exception to this check.
+  pacman_config=$evidence/pacman.conf
+  awk -v mirror="$offline_mirror_dir" '
+    /^\[options\]$/ { print; print "DisableSandbox"; next }
+    /^Server[[:space:]]*=/ { print "Server = file://" mirror; next }
+    { print }
+  ' /configs/pacman-offline.conf >"$pacman_config" || return 1
   # Package signatures and exact repository contents have already been
   # verified by the same stages used for the complete diagnostic image.
-  if ! pacstrap -C "$build_cache_dir/pacman-offline.conf" -G -M \
+  if ! pacstrap -C "$pacman_config" -G -M \
     "$target" base omarchy omarchy-settings omarchy-mac >"$evidence/pacstrap.log" 2>&1; then
     cat "$evidence/pacstrap.log" >&2
     return 1
