@@ -5,6 +5,9 @@
 run_quattro_package_install_check() {
   [[ -n ${OMARCHY_CANDIDATE_ROOT:-} && $OMARCHY_BUILD_MODE == "diagnostic" ]] || return 1
   local target evidence started pacman_config
+  local -a candidate_names
+  mapfile -t candidate_names < <(jq -er '.packages[].name' "$OMARCHY_CANDIDATE_ROOT/manifest.json")
+  (( ${#candidate_names[@]} == 3 || ${#candidate_names[@]} == 5 )) || return 1
   target=$(mktemp -d /var/tmp/quattro-package-root.XXXXXX)
   evidence=/out/build-evidence/$OMARCHY_BUILD_RUN_ID/package-install-check
   mkdir -p "$evidence"
@@ -21,7 +24,7 @@ run_quattro_package_install_check() {
   # Package signatures and exact repository contents have already been
   # verified by the same stages used for the complete diagnostic image.
   if ! pacstrap -C "$pacman_config" -G -M \
-    "$target" base omarchy omarchy-settings omarchy-mac >"$evidence/pacstrap.log" 2>&1; then
+    "$target" base "${candidate_names[@]}" >"$evidence/pacstrap.log" 2>&1; then
     cat "$evidence/pacstrap.log" >&2
     return 1
   fi
@@ -42,7 +45,8 @@ for package in data['packages']:
     if installed.get(name) != package['version']:
         raise SystemExit('Installed candidate version mismatch: ' + name)
     revision = 'usr/share/omarchy-mac/source-revision' if name == 'omarchy-mac' else f'usr/share/doc/{name}/source-revision'
-    if (target / revision).read_text().strip() != data['source_revision']:
+    expected = data['package_repository_revision'] if name in ('avd-fw', 'libva-v4l2_request-avd') else data['source_revision']
+    if (target / revision).read_text().strip() != expected:
         raise SystemExit('Installed candidate source mismatch: ' + name)
 if {'omarchy-dev', 'omarchy-settings-dev'} & installed.keys():
     raise SystemExit('Old desktop installed alongside candidate')

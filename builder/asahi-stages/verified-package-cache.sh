@@ -325,6 +325,10 @@ prepare_verified_package_cache() {
   filter_target_packages <"${base_pkg_lists[1]}" >"$shipped_other_packages"
   if [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]]; then
     filter_target_packages </tmp/omarchy-pkglists/usr/share/omarchy/install/omarchy-apple.packages >>"$shipped_base_packages"
+    # Schema 2 includes signed video dependencies alongside the desktop trio.
+    # Select every authenticated candidate so hardware setup cannot substitute
+    # a mutable edge build during configuration.
+    jq -er '.packages[].name' "$OMARCHY_CANDIDATE_ROOT/manifest.json" >>"$shipped_base_packages"
   fi
   if [[ $OMARCHY_ARCH == aarch64 ]] &&
     ! grep -Fxq archlinuxarm-keyring "$shipped_base_packages"; then

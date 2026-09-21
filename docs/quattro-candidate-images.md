@@ -85,3 +85,9 @@ Two optional video-decoder dependencies need a delivery decision before the next
 These hashes identify the observed GitHub release assets; they do not satisfy the image builder's package-signature contract. Prefer candidate-only builds and signatures for these dependencies, followed by explicit inclusion in the offline target set. Alternatively, explicitly defer optional video acceleration for the first trial through a tested installer interface. Do not bypass the image ownership/signature checks or silently treat mutable edge downloads as verified inputs.
 
 M3 host readiness still needs its SSH address, exact model/macOS version, free space, and backup confirmation. No physical M3 installation, image publication, encryption trial, or active desktop change has occurred.
+
+## Five-package candidate integration
+
+The image importer accepts schema-2 candidates containing exactly the desktop trio plus `avd-fw` and `libva-v4l2_request-avd`. All eight named inputs (five packages, two package lists, and the build manifest) and the receipt require signatures from the existing pinned signing key. Desktop source markers must match the selected desktop commit; video source markers must match the recorded package-repository revision. Schema-1 triples remain importable for reproducing older checks, but do not supply the video dependencies needed by current hardware setup.
+
+Every authenticated package name is added to the offline target set, so the image installs the signed decoder packages before hardware setup. The short transaction check also installs the full candidate set and verifies both kinds of source marker. No unsigned-package exception or edge repository change is introduced. Package workflow review: https://github.com/omarchy-mac/omarchy-pkgs-aarch64/pull/56.

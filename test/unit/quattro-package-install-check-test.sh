@@ -45,4 +45,38 @@ for failure in transaction hook missing; do
   if run_quattro_package_install_check; then exit 1; fi
   [[ ! -e $work/evidence/$failure/package-install-check/result.json ]]
 done
+# Exercise all five installation targets and the independent recipe revision.
+python3 - "$OMARCHY_CANDIDATE_ROOT/manifest.json" <<'PYTEST'
+import json, sys
+from pathlib import Path
+p=Path(sys.argv[1]); data=json.loads(p.read_text())
+data['package_repository_revision']='recipe-fixture'
+data['packages'] += [{'name':name,'version':'1-1'} for name in ('avd-fw','libva-v4l2_request-avd')]
+p.write_text(json.dumps(data))
+PYTEST
+original_pacstrap=$(declare -f pacstrap)
+eval "${original_pacstrap/pacstrap ()/desktop_pacstrap ()}"
+pacstrap() {
+  [[ ${*:6} == "base omarchy omarchy-settings omarchy-mac avd-fw libva-v4l2_request-avd" ]]
+  desktop_pacstrap "${@:1:9}"
+  for name in avd-fw libva-v4l2_request-avd; do
+    mkdir -p "$5/usr/share/doc/$name"
+    printf '%s\n' "${video_revision:-recipe-fixture}" >"$5/usr/share/doc/$name/source-revision"
+  done
+}
+pacman() {
+  for name in omarchy omarchy-settings omarchy-mac avd-fw libva-v4l2_request-avd; do
+    [[ $failure != "$name" ]] || continue
+    printf '%s 1-1\n' "$name"
+  done
+}
+failure=none; OMARCHY_BUILD_RUN_ID=five
+run_quattro_package_install_check
+for failure in avd-fw libva-v4l2_request-avd; do
+  OMARCHY_BUILD_RUN_ID=$failure
+  if run_quattro_package_install_check; then exit 1; fi
+  [[ ! -e $work/evidence/$failure/package-install-check/result.json ]]
+done
+failure=none; video_revision=wrong; OMARCHY_BUILD_RUN_ID=wrong-video-revision
+if run_quattro_package_install_check; then exit 1; fi
 printf 'PASS: fast package check records success only after transaction and version checks\n'

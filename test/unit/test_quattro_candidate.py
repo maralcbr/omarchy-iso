@@ -18,6 +18,7 @@ spec.loader.exec_module(c)
 
 
 class CandidateTest(unittest.TestCase):
+    schema = 1
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
@@ -41,11 +42,11 @@ class CandidateTest(unittest.TestCase):
         cls.bundle = cls.base / 'bundle'
         cls.bundle.mkdir()
         packages = []
-        for name in sorted(c.NAMES):
+        for name in sorted(c.NAMES | c.VIDEO_NAMES if cls.schema == 2 else c.NAMES):
             deps = ['omarchy-settings=1.0'] if name == 'omarchy' else []
-            content = {'.PKGINFO': '\n'.join([f'pkgname = {name}', 'pkgver = 1.0-1', 'arch = aarch64', *['depend = ' + d for d in deps]])}
+            content = {'.PKGINFO': '\n'.join([f'pkgname = {name}', 'pkgver = 1.0-1', 'arch = any' if name == 'avd-fw' else 'arch = aarch64', *['depend = ' + d for d in deps]])}
             revision = 'usr/share/omarchy-mac/source-revision' if name == 'omarchy-mac' else f'usr/share/doc/{name}/source-revision'
-            content[revision] = cls.source + '\n'
+            content[revision] = ('b' * 40 if name in c.VIDEO_NAMES else cls.source) + '\n'
             if name == 'omarchy':
                 for label in ('base', 'apple'):
                     filename = f'omarchy-{label}.packages'
@@ -60,7 +61,7 @@ class CandidateTest(unittest.TestCase):
                     archive.addfile(member, io.BytesIO(raw))
             packages.append(dict(name=name, version='1.0-1', filename=filename, dependencies=deps,
                                  sha256=c.digest(cls.bundle / filename)))
-        manifest = dict(schema=1, candidate_only=True, publication='none', signing='none',
+        manifest = dict(schema=cls.schema, package_repository_revision='b' * 40, candidate_only=True, publication='none', signing='none',
                         source_repository='omacom/omarchy-mac', source_revision=cls.source, packages=packages)
         (cls.bundle / 'manifest.json').write_text(json.dumps(manifest))
         receipt = dict(schema=1, candidate_only=True, publication='none', source_revision=cls.source,
@@ -89,7 +90,7 @@ class CandidateTest(unittest.TestCase):
                           kwargs.get('source', self.source), kwargs.get('trust', self.trust))
 
     def test_signed_set_creates_readonly_snapshot(self):
-        self.assertEqual(len(self.verify()['packages']), 3)
+        self.assertEqual(len(self.verify()['packages']), 5 if self.schema == 2 else 3)
         self.assertEqual((self.work / 'output').stat().st_mode & 0o777, 0o555)
 
     def test_tampered_archive(self):
@@ -121,6 +122,39 @@ class CandidateTest(unittest.TestCase):
     def test_unsigned_checksum_file_is_ignored(self):
         (self.input / 'SHA256SUMS').write_text('not an authentication input\n')
         self.verify()
+
+
+class VideoCandidateTest(CandidateTest):
+    schema = 2
+
+    def resign_manifest(self, data):
+        manifest = self.input / 'manifest.json'
+        manifest.write_text(json.dumps(data))
+        receipt_path = self.input / 'signing.json'
+        receipt = json.loads(receipt_path.read_text())
+        receipt['input_manifest_sha256'] = c.digest(manifest)
+        for entry in receipt['files']:
+            if entry['filename'] == 'manifest.json':
+                entry['sha256'] = c.digest(manifest)
+        receipt_path.write_text(json.dumps(receipt))
+        for path in (manifest, receipt_path):
+            Path(str(path) + '.sig').unlink()
+            subprocess.run([*self.gpg, '--local-user', self.subkey + '!', '--detach-sign', str(path)], check=True)
+        return c.digest(receipt_path)
+
+    def test_wrong_video_recipe_revision(self):
+        data = json.loads((self.input / 'manifest.json').read_text())
+        data['package_repository_revision'] = 'c' * 40
+        checksum = self.resign_manifest(data)
+        with self.assertRaisesRegex(ValueError, 'mixed package sources'):
+            self.verify(checksum=checksum)
+
+    def test_missing_video_package(self):
+        data = json.loads((self.input / 'manifest.json').read_text())
+        data['packages'] = [p for p in data['packages'] if p['name'] != 'avd-fw']
+        checksum = self.resign_manifest(data)
+        with self.assertRaisesRegex(ValueError, 'wrong package set'):
+            self.verify(checksum=checksum)
 
 
 if __name__ == '__main__':

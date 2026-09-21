@@ -13,6 +13,7 @@ import tempfile
 
 TRUST = Path(__file__).resolve().parent / 'quattro-trust'
 NAMES = {'omarchy', 'omarchy-settings', 'omarchy-mac'}
+VIDEO_NAMES = {'avd-fw', 'libva-v4l2_request-avd'}
 
 
 def require(ok, message):
@@ -74,7 +75,7 @@ def snapshot(root, destination, receipt_hash, source, trust=TRUST):
             require(all(receipt[key] == policy[key] for key in ('primary_fingerprint', 'signing_subkey_fingerprint')),
                     'receipt signer mismatch')
             entries = receipt['files']
-            require(len(entries) == 6 and len({p['filename'] for p in entries}) == 6, 'unexpected signed inventory')
+            require(len(entries) in (6, 8) and len({p['filename'] for p in entries}) == len(entries), 'unexpected signed inventory')
             for entry in entries:
                 name = entry['filename']
                 copy_file(root, name, destination)
@@ -84,11 +85,14 @@ def snapshot(root, destination, receipt_hash, source, trust=TRUST):
             manifest = destination / 'manifest.json'
             require(digest(manifest) == receipt['input_manifest_sha256'], 'build manifest mismatch')
             data = json.loads(manifest.read_text())
-            require(data['schema'] == 1 and data['candidate_only'] is True and data['publication'] == 'none'
+            require(data['schema'] in (1, 2) and data['candidate_only'] is True and data['publication'] == 'none'
                     and data['signing'] == 'none' and data['source_repository'] == 'omacom/omarchy-mac'
                     and data['source_revision'] == source, 'wrong build manifest')
             packages = data['packages']
-            require(len(packages) == 3 and {p['name'] for p in packages} == NAMES, 'wrong package set')
+            names = NAMES | VIDEO_NAMES if data['schema'] == 2 else NAMES
+            require(len(packages) == len(names) and {p['name'] for p in packages} == names, 'wrong package set')
+            if data['schema'] == 2:
+                require(re.fullmatch('[a-f0-9]{40}', data['package_repository_revision']), 'invalid recipe revision')
             expected = {'manifest.json', 'omarchy-base.packages', 'omarchy-apple.packages'} | {p['filename'] for p in packages}
             require({p['filename'] for p in entries} == expected, 'unexpected signed files')
             versions = {}
@@ -102,11 +106,12 @@ def snapshot(root, destination, receipt_hash, source, trust=TRUST):
                     if ' = ' in line:
                         key, value = line.split(' = ', 1)
                         fields.setdefault(key, []).append(value)
-                require(fields.get('pkgname') == [name] and fields.get('arch') == ['aarch64']
+                require(fields.get('pkgname') == [name] and fields.get('arch') == ['any' if name == 'avd-fw' else 'aarch64']
                         and fields.get('pkgver') == [package['version']], 'package metadata mismatch')
                 require(fields.get('depend', []) == package['dependencies'], 'dependency metadata mismatch')
                 revision = 'usr/share/omarchy-mac/source-revision' if name == 'omarchy-mac' else f'usr/share/doc/{name}/source-revision'
-                require(member(path, revision).decode().strip() == source, 'mixed package sources')
+                expected_source = data['package_repository_revision'] if name in VIDEO_NAMES else source
+                require(member(path, revision).decode().strip() == expected_source, 'mixed package sources')
                 versions[name] = package['version']
                 if name == 'omarchy':
                     for label in ('base', 'apple'):
