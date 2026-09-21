@@ -19,6 +19,10 @@ NO_CACHE=""
 KEEP_PKG_CACHE=""
 LOCAL_OMARCHY_PATH=""
 LOCAL_PKGS_PATH=""
+CANDIDATE_INPUT=""
+CANDIDATE_PACKAGE_CHECK=0
+OMARCHY_CANDIDATE_RECEIPT_SHA256=""
+OMARCHY_CANDIDATE_SOURCE=""
 OMARCHY_ARCH="x86_64"
 OMARCHY_ARCH_EXPLICIT=0
 OMARCHY_MEDIA_TARGET=""
@@ -113,6 +117,21 @@ while [[ $# -gt 0 ]]; do
     OMARCHY_MIRROR=edge
     shift
     ;;
+  --candidate-package-check)
+    CANDIDATE_PACKAGE_CHECK=1
+    shift
+    ;;
+  --candidate-packages)
+    CANDIDATE_INPUT=${2:-}
+    OMARCHY_CANDIDATE_RECEIPT_SHA256=${3:-}
+    OMARCHY_CANDIDATE_SOURCE=${4:-}
+    if [[ -z $CANDIDATE_INPUT || ! $OMARCHY_CANDIDATE_RECEIPT_SHA256 =~ ^[a-f0-9]{64}$ ||
+      ! $OMARCHY_CANDIDATE_SOURCE =~ ^[a-f0-9]{40}$ ]]; then
+      echo "--candidate-packages requires DIRECTORY SIGNING_JSON_SHA256 SOURCE_COMMIT" >&2
+      exit 1
+    fi
+    shift 4
+    ;;
   --local-source)
     LOCAL_OMARCHY_PATH="${2:-}"
     LOCAL_PKGS_PATH="${3:-}"
@@ -141,7 +160,7 @@ while [[ $# -gt 0 ]]; do
     ;;
   *)
     echo "Unknown option: $1"
-    echo "Usage: $0 [--arch x86_64|aarch64] [--target x86_64/pc|aarch64/generic|aarch64/apple-silicon] [--artifact iso|asahi-os-package] [--product omarchy-mx-mac|omarchy-mx-mac-aurora] [--mode qualification|diagnostic] [--checkpoint-policy read-write|write-only] [--require-cache-hit-through configured-target] [--apple-media-validation-build] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>]"
+    echo "Usage: $0 [--arch x86_64|aarch64] [--target x86_64/pc|aarch64/generic|aarch64/apple-silicon] [--artifact iso|asahi-os-package] [--product omarchy-mx-mac|omarchy-mx-mac-aurora] [--mode qualification|diagnostic] [--checkpoint-policy read-write|write-only] [--require-cache-hit-through configured-target] [--apple-media-validation-build] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>] [--candidate-packages DIRECTORY SIGNING_JSON_SHA256 SOURCE_COMMIT] [--candidate-package-check]"
     exit 1
     ;;
   esac
@@ -224,6 +243,17 @@ asahi_full_os_package=0
 if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon &&
   $OMARCHY_ARTIFACT_KIND == asahi-os-package ]]; then
   asahi_full_os_package=1
+fi
+if (( CANDIDATE_PACKAGE_CHECK )) && [[ -z $CANDIDATE_INPUT ]]; then
+  echo "--candidate-package-check requires --candidate-packages" >&2
+  exit 1
+fi
+if [[ -n $CANDIDATE_INPUT ]]; then
+  if (( ! asahi_full_os_package )) || [[ $OMARCHY_BUILD_MODE != "diagnostic" ||
+    -n $LOCAL_OMARCHY_PATH || ${OMARCHY_ASAHI_PRODUCT_NAME:-omarchy-mx-mac} != "omarchy-mx-mac" ]]; then
+    echo "Candidate packages require the diagnostic Apple full-OS build, without local source or Aurora." >&2
+    exit 1
+  fi
 fi
 if [[ -z $OMARCHY_CHECKPOINT_POLICY ]]; then
   if (( asahi_full_os_package )) && [[ $OMARCHY_BUILD_MODE == qualification ]]; then
@@ -439,6 +469,12 @@ if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon &&
     fi
   }
   trap cleanup_asahi_host_build EXIT
+  if [[ -n $CANDIDATE_INPUT ]]; then
+    python3 "$BUILD_ROOT/builder/quattro-candidate.py" \
+      --input "$CANDIDATE_INPUT" --output "$HOST_BUILD_STATE/candidate-packages" \
+      --receipt-sha256 "$OMARCHY_CANDIDATE_RECEIPT_SHA256" \
+      --source-revision "$OMARCHY_CANDIDATE_SOURCE"
+  fi
   ASAHI_STAGE_INPUT_ROOT=$HOST_BUILD_STATE/stage-inputs
   python3 "$BUILD_ROOT/builder/asahi_stage_inputs.py" generate \
     --repo-root "$BUILD_ROOT" \
@@ -840,6 +876,15 @@ if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon &&
   fi
 fi
 
+if [[ -n $CANDIDATE_INPUT ]]; then
+  DOCKER_ARGS+=(
+    -e "OMARCHY_CANDIDATE_ROOT=/omarchy-candidate-packages"
+    -e "OMARCHY_CANDIDATE_PACKAGE_CHECK=$CANDIDATE_PACKAGE_CHECK"
+    -e "OMARCHY_CANDIDATE_RECEIPT_SHA256=$OMARCHY_CANDIDATE_RECEIPT_SHA256"
+    -e "OMARCHY_CANDIDATE_SOURCE=$OMARCHY_CANDIDATE_SOURCE"
+    -v "$HOST_BUILD_STATE/candidate-packages:/omarchy-candidate-packages:ro"
+  )
+fi
 if [[ -n $LOCAL_OMARCHY_PATH ]]; then
   DOCKER_ARGS+=(
     -v "$LOCAL_OMARCHY_PATH:/omarchy-source:ro"
@@ -847,7 +892,7 @@ if [[ -n $LOCAL_OMARCHY_PATH ]]; then
   )
 fi
 
-if [[ -d /var/cache/pacman/pkg ]]; then
+if [[ -d /var/cache/pacman/pkg && -z $CANDIDATE_INPUT ]]; then
   DOCKER_ARGS+=(-v "/var/cache/pacman/pkg:/var/cache/pacman/pkg")
 fi
 
@@ -857,6 +902,7 @@ if [[ -z "$NO_CACHE" ]]; then
   cache_scope="iso_${OMARCHY_MIRROR}"
   [[ $OMARCHY_ARCH == "x86_64" ]] || cache_scope+="_${OMARCHY_ARCH}"
   [[ $OMARCHY_MEDIA_TARGET != "aarch64/apple-silicon" ]] || cache_scope+="_apple_silicon"
+  [[ -z $CANDIDATE_INPUT ]] || cache_scope+="_quattro_candidates"
   cache_base=${ASAHI_CACHE_BASE:-${XDG_CACHE_HOME:-$HOME/.cache}/omarchy}
   OFFLINE_REPO_BUILD_CACHE_DIR="$cache_base/$cache_scope/airootfs/var/cache/omarchy"
   if (( asahi_full_os_package )); then

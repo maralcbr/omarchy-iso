@@ -12,6 +12,11 @@ prepare_finalized_runtime_inputs() {
 
   [[ $OMARCHY_ARCH == aarch64 ]] || return 0
   mkdir -p "$runtime_root"
+  if [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]]; then
+    install -m 0644 "$OMARCHY_CANDIDATE_ROOT/signing.json" "$runtime_root/candidate-signing.json"
+  else
+    rm -f "$runtime_root/candidate-signing.json"
+  fi
   install -m 0644 "$offline_mirror_dir/ARM-REPOSITORY" \
     "$runtime_root/arm-repository"
   install -m 0644 "$offline_mirror_dir/ARM-RUNTIME" \

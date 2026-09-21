@@ -26,7 +26,8 @@
       "dispatches": [
         "bin/omarchy-iso-boot",
         "builder/build-iso.sh",
-        "builder/pinned-node-cache.py"
+        "builder/pinned-node-cache.py",
+        "builder/quattro-candidate.py"
       ],
       "runtime_inputs": [],
       "runtime_settings": [],
@@ -51,7 +52,10 @@
         "builder/asahi-build-lock.json",
         "builder/products/omarchy-mx-mac.json",
         "builder/products/omarchy-mx-mac-aurora.json",
-        "configs/profiledef.sh"
+        "configs/profiledef.sh",
+        "builder/quattro-candidate.py",
+        "builder/quattro-trust/public.gpg",
+        "builder/quattro-trust/policy.json"
       ],
       "lock_paths": [
         "builder"
@@ -83,9 +87,15 @@
         "builder/prepare-asahi-pacman-config.sh",
         "builder/summarize-asahi-build.py",
         "builder/verify-apple-media.sh",
-        "builder/verify-asahi-offline-repository-view.py"
+        "builder/verify-asahi-offline-repository-view.py",
+        "builder/quattro-package-install-check.sh"
       ],
-      "runtime_inputs": [],
+      "runtime_inputs": [
+        {
+          "path": "candidate-signing.json",
+          "required": false
+        }
+      ],
       "runtime_settings": [
         "OMARCHY_ARCH",
         "OMARCHY_ARTIFACT_KIND",
@@ -103,7 +113,9 @@
         "builder/fetch-apple-platform-snapshot.sh",
         "builder/fetch-aurora-package-snapshot.sh",
         "builder/install-apple-platform-keyring.sh",
-        "builder/pinned-node-cache.py"
+        "builder/pinned-node-cache.py",
+        "builder/quattro-candidate.py",
+        "builder/quattro-candidate-packages.sh"
       ],
       "control_entrypoints": [
         "bin/omarchy-iso-make",
@@ -136,7 +148,11 @@
         "builder/omarchy-arm-runtime.asc",
         "builder/omarchy.gpg",
         "configs/pacman-online-arm.conf",
-        "archiso/configs/releng/packages.x86_64"
+        "archiso/configs/releng/packages.x86_64",
+        "builder/quattro-candidate.py",
+        "builder/quattro-candidate-packages.sh",
+        "builder/quattro-trust/public.gpg",
+        "builder/quattro-trust/policy.json"
       ],
       "admission_paths": [
         "bin/omarchy-iso-make",
@@ -152,7 +168,8 @@
         "builder/file-mode-adapter.sh",
         "builder/products/omarchy-mx-mac.json",
         "builder/products/omarchy-mx-mac-aurora.json",
-        "configs/profiledef.sh"
+        "configs/profiledef.sh",
+        "builder/quattro-package-install-check.sh"
       ],
       "lock_paths": [
         "node"
@@ -283,7 +300,8 @@
         "builder/asahi-stages/configured-target.sh",
         "builder/capture-asahi-configured-target.py",
         "builder/run-asahi-configured-stage.py",
-        "builder/prepare-asahi-pacman-config.sh"
+        "builder/prepare-asahi-pacman-config.sh",
+        "builder/quattro-package-install-check.sh"
       ],
       "control_entrypoints": [
         "builder/asahi-checkpoint-admission.sh",
@@ -308,7 +326,8 @@
         "configs/airootfs/usr/share/omarchy-iso/orchestrator/phases.py",
         "configs/airootfs/usr/share/omarchy-iso/orchestrator/configured_phases.py",
         "configs/airootfs/usr/share/omarchy-iso/orchestrator/target_packages.py",
-        "configs/airootfs/usr/share/omarchy-iso/orchestrator/ui.py"
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/ui.py",
+        "builder/quattro-package-install-check.sh"
       ],
       "admission_paths": [
         "builder/asahi-checkpoint-admission.sh",
@@ -346,6 +365,10 @@
         {
           "path": "omarchy-arm-repository.asc",
           "required": true
+        },
+        {
+          "path": "candidate-signing.json",
+          "required": false
         }
       ],
       "runtime_settings": [

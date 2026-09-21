@@ -497,13 +497,18 @@ def configure_arm_package_repository(ctx: InstallContext) -> None:
     target_state = ctx.target / "var/lib/omarchy/package-snapshots"
     target_state.mkdir(parents=True, exist_ok=True)
     shutil.copy(repository_record, target_state / "ARM-REPOSITORY")
-    shutil.copy(runtime_record, target_state / "ARM-RUNTIME")
-    # What omarchy-update-asahi-bundle reads to know which bundle is installed.
-    # Without it a fresh install re-downloads the bundle it already carries on
-    # its first update.
+    candidate_record = media_root / "candidate-signing.json"
     release_state = ctx.target / "var/lib/omarchy/asahi-quattro-release"
-    shutil.copy(channel_record, release_state)
-    release_state.chmod(0o644)
+    if candidate_record.is_file():
+        # The dependency baseline is still recorded above, but this desktop
+        # did not come from the older release-tagged runtime bundle.
+        shutil.copy(candidate_record, target_state / "QUATTRO-CANDIDATE.json")
+        (target_state / "ARM-RUNTIME").unlink(missing_ok=True)
+        release_state.unlink(missing_ok=True)
+    else:
+        shutil.copy(runtime_record, target_state / "ARM-RUNTIME")
+        shutil.copy(channel_record, release_state)
+        release_state.chmod(0o644)
 
     target_key = ctx.target / "usr/share/omarchy/omarchy-arm-repository.asc"
     target_key.parent.mkdir(parents=True, exist_ok=True)

@@ -11,6 +11,9 @@ prepare_verified_package_runtime_manifest() {
     echo "ERROR: verified package runtime-manifest root is unsafe" >&2
     return 1
   }
+  if [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]]; then
+    cp "$OMARCHY_CANDIDATE_ROOT/signing.json" "$runtime_root/candidate-signing.json"
+  fi
   verified_package_runtime_manifest=$runtime_root/runtime-manifest.json
   python3 /builder/asahi_stage_inputs.py runtime-manifest \
     --root "$runtime_root" \
@@ -111,6 +114,8 @@ initialize_verified_package_cache_stage() {
   fi
 
   prepare_verified_package_snapshots_and_trust
+  source /builder/quattro-candidate-packages.sh
+  prepare_quattro_candidate_packages
 }
 
 prepare_verified_package_snapshots_and_trust() {
@@ -294,6 +299,9 @@ prepare_verified_package_cache() {
       "/tmp/omarchy-pkglists/usr/share/omarchy/install/$TARGET_BASE_PACKAGE_LIST"
       "/tmp/omarchy-pkglists/usr/share/omarchy/install/$TARGET_OTHER_PACKAGE_LIST"
     )
+    if [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]]; then
+      bsdtar -xf "$omarchy_pkg" -C /tmp/omarchy-pkglists usr/share/omarchy/install/omarchy-apple.packages
+    fi
     # A runtime predating the shared form may omit this member; emit the
     # actionable error below instead of bsdtar's bare missing-member failure.
     bsdtar -xf "$omarchy_pkg" -C /tmp/omarchy-pkglists usr/share/omarchy/install/provisioning/setup-form.sh 2>/dev/null || true
@@ -305,6 +313,9 @@ prepare_verified_package_cache() {
   shipped_other_packages="$build_cache_dir/airootfs/usr/share/omarchy-iso/omarchy-other.packages"
   filter_target_packages <"${base_pkg_lists[0]}" >"$shipped_base_packages"
   filter_target_packages <"${base_pkg_lists[1]}" >"$shipped_other_packages"
+  if [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]]; then
+    filter_target_packages </tmp/omarchy-pkglists/usr/share/omarchy/install/omarchy-apple.packages >>"$shipped_base_packages"
+  fi
   if [[ $OMARCHY_ARCH == aarch64 ]] &&
     ! grep -Fxq archlinuxarm-keyring "$shipped_base_packages"; then
     printf '%s\n' archlinuxarm-keyring >>"$shipped_base_packages"
@@ -405,6 +416,7 @@ prepare_verified_package_cache() {
 
   requested_package_files=/tmp/asahi-requested-package-files
   printf '%s\n' "${required_package_files[@]}" | LC_ALL=C sort -u >"$requested_package_files"
+  verify_quattro_candidate_selection
   bash /builder/prune-offline-mirror.sh "$offline_mirror_dir" <"$requested_package_files"
 
   if uses_verified_package_checkpoint; then

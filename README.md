@@ -176,3 +176,7 @@ Run `./bin/omarchy-iso-upload [release/omarchy.iso]`. This requires rclone confi
 ## Full release of the ISO
 
 Run `./bin/omarchy-iso-release VERSION` to create, test, sign, and upload the ISO in one flow. Add `--rc` to release an RC build instead.
+
+### Shared quattro candidates
+
+The diagnostic builder can consume an exact signed `omarchy` / `omarchy-settings` / `omarchy-mac` candidate set. Start with the shorter package-installation check before building images; see [signed candidate inputs and test cycles](docs/quattro-candidate-images.md).

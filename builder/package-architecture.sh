@@ -47,6 +47,10 @@ select_omarchy_package_roles() {
       : "${OMARCHY_SETTINGS_PACKAGE:=omarchy-settings}"
       ;;
   esac
+  if [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]]; then
+    OMARCHY_RUNTIME_PACKAGE=omarchy
+    OMARCHY_SETTINGS_PACKAGE=omarchy-settings
+  fi
   : "${OMARCHY_NVIM_PACKAGE:=omarchy-nvim}"
   export OMARCHY_RUNTIME_PACKAGE OMARCHY_SETTINGS_PACKAGE OMARCHY_NVIM_PACKAGE
 }
@@ -93,6 +97,10 @@ configure_package_architecture() {
       ;;
   esac
 
+  if [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]]; then
+    TARGET_BASE_PACKAGE_LIST=omarchy-base.packages
+    TARGET_OTHER_PACKAGE_LIST=omarchy-other.packages
+  fi
   if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon ]]; then
     # lsinitcpio is required to verify mkinitcpio's early-CPIO-plus-compressed
     # Asahi initramfs format.
@@ -119,8 +127,11 @@ filter_target_packages() {
   while IFS= read -r line || [[ -n $line ]]; do
     if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon ]]; then
       case "$line" in
-        amd-ucode|intel-ucode|limine-mkinitcpio-hook|limine-snapper-sync|snapper|sof-firmware)
+        amd-ucode|intel-ucode|limine-mkinitcpio-hook|limine-snapper-sync|sof-firmware)
           continue
+          ;;
+        snapper)
+          [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]] || continue
           ;;
         limine)
           line=grub

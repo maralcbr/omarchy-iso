@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""Offline signed-input fixtures; never use production secrets or host trust."""
+import hashlib
+import importlib.util
+import io
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import tarfile
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+spec = importlib.util.spec_from_file_location('candidate', ROOT / 'builder/quattro-candidate.py')
+c = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(c)
+
+
+class CandidateTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.base = Path(cls.tmp.name)
+        cls.home = cls.base / 'gpg'
+        cls.home.mkdir(mode=0o700)
+        cls.gpg = ['gpg', '--homedir', str(cls.home), '--batch', '--pinentry-mode', 'loopback', '--passphrase', '']
+        def gpg(*args):
+            return subprocess.check_output([*cls.gpg, *args], stderr=subprocess.DEVNULL)
+        gpg('--quick-generate-key', 'Candidate test <fixture@example.invalid>', 'ed25519', 'cert', '1d')
+        cls.primary = gpg('--with-colons', '--list-keys').decode().split('fpr:::::::::')[1].split(':')[0]
+        gpg('--quick-add-key', cls.primary, 'ed25519', 'sign', '1d')
+        cls.subkey = gpg('--with-colons', '--list-keys').decode().split('fpr:::::::::')[2].split(':')[0]
+        cls.trust = cls.base / 'trust'
+        cls.trust.mkdir()
+        (cls.trust / 'public.gpg').write_bytes(gpg('--export', cls.primary))
+        cls.policy = dict(primary_fingerprint=cls.primary, signing_subkey_fingerprint=cls.subkey,
+                          public_key_sha256=c.digest(cls.trust / 'public.gpg'))
+        (cls.trust / 'policy.json').write_text(json.dumps(cls.policy))
+        cls.source = 'a' * 40
+        cls.bundle = cls.base / 'bundle'
+        cls.bundle.mkdir()
+        packages = []
+        for name in sorted(c.NAMES):
+            deps = ['omarchy-settings=1.0'] if name == 'omarchy' else []
+            content = {'.PKGINFO': '\n'.join([f'pkgname = {name}', 'pkgver = 1.0-1', 'arch = aarch64', *['depend = ' + d for d in deps]])}
+            revision = 'usr/share/omarchy-mac/source-revision' if name == 'omarchy-mac' else f'usr/share/doc/{name}/source-revision'
+            content[revision] = cls.source + '\n'
+            if name == 'omarchy':
+                for label in ('base', 'apple'):
+                    filename = f'omarchy-{label}.packages'
+                    (cls.bundle / filename).write_text('omarchy-mac\n')
+                    content['usr/share/omarchy/install/' + filename] = 'omarchy-mac\n'
+            filename = name + '-1.0-1-aarch64.pkg.tar.xz'
+            with tarfile.open(cls.bundle / filename, 'w:xz') as archive:
+                for path, value in content.items():
+                    raw = value.encode()
+                    member = tarfile.TarInfo(path)
+                    member.size = len(raw)
+                    archive.addfile(member, io.BytesIO(raw))
+            packages.append(dict(name=name, version='1.0-1', filename=filename, dependencies=deps,
+                                 sha256=c.digest(cls.bundle / filename)))
+        manifest = dict(schema=1, candidate_only=True, publication='none', signing='none',
+                        source_repository='omacom/omarchy-mac', source_revision=cls.source, packages=packages)
+        (cls.bundle / 'manifest.json').write_text(json.dumps(manifest))
+        receipt = dict(schema=1, candidate_only=True, publication='none', source_revision=cls.source,
+                       primary_fingerprint=cls.primary, signing_subkey_fingerprint=cls.subkey,
+                       input_manifest_sha256=c.digest(cls.bundle / 'manifest.json'),
+                       files=[dict(filename=p.name, sha256=c.digest(p)) for p in sorted(cls.bundle.iterdir())])
+        (cls.bundle / 'signing.json').write_text(json.dumps(receipt))
+        for path in list(cls.bundle.iterdir()):
+            gpg('--local-user', cls.subkey + '!', '--detach-sign', str(path))
+        cls.receipt_hash = c.digest(cls.bundle / 'signing.json')
+
+    @classmethod
+    def tearDownClass(cls):
+        subprocess.run(['gpgconf', '--homedir', str(cls.home), '--kill', 'gpg-agent'], check=True)
+        for path in cls.base.rglob('*'):
+            if path.is_dir(): path.chmod(0o700)
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp(dir=self.base))
+        self.input = self.work / 'input'
+        shutil.copytree(self.bundle, self.input)
+
+    def verify(self, **kwargs):
+        return c.snapshot(self.input, self.work / 'output', kwargs.get('checksum', self.receipt_hash),
+                          kwargs.get('source', self.source), kwargs.get('trust', self.trust))
+
+    def test_signed_set_creates_readonly_snapshot(self):
+        self.assertEqual(len(self.verify()['packages']), 3)
+        self.assertEqual((self.work / 'output').stat().st_mode & 0o777, 0o555)
+
+    def test_tampered_archive(self):
+        next(self.input.glob('*.pkg.tar.xz')).write_bytes(b'changed')
+        with self.assertRaisesRegex(ValueError, 'checksum'):
+            self.verify()
+
+    def test_unsigned_receipt_checksum_source_and_symlink(self):
+        for change in ('signature', 'checksum', 'source', 'symlink'):
+            with self.subTest(change=change):
+                work = self.work / change
+                shutil.copytree(self.bundle, work)
+                if change == 'signature': (work / 'signing.json.sig').unlink()
+                if change == 'symlink':
+                    (work / 'manifest.json').unlink()
+                    (work / 'manifest.json').symlink_to(self.bundle / 'manifest.json')
+                with self.assertRaises((ValueError, OSError)):
+                    c.snapshot(work, self.work / (change + '-out'),
+                               '0' * 64 if change == 'checksum' else self.receipt_hash,
+                               'b' * 40 if change == 'source' else self.source, self.trust)
+
+    def test_artifact_cannot_supply_trust_anchor(self):
+        trust = self.work / 'trust'
+        shutil.copytree(self.trust, trust)
+        (trust / 'public.gpg').write_bytes(b'replaced')
+        with self.assertRaisesRegex(ValueError, 'trust anchor'):
+            self.verify(trust=trust)
+
+    def test_unsigned_checksum_file_is_ignored(self):
+        (self.input / 'SHA256SUMS').write_text('not an authentication input\n')
+        self.verify()
+
+
+if __name__ == '__main__':
+    unittest.main()

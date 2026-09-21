@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# Only used in the disposable Apple image builder. No installed keyring or
+# online repository configuration is changed by this adapter.
+prepare_quattro_candidate_packages() {
+  [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]] || return 0
+  [[ $OMARCHY_BUILD_MODE == "diagnostic" &&
+    $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" &&
+    $OMARCHY_ARTIFACT_KIND == "asahi-os-package" ]] || return 1
+  local verified=/tmp/omarchy-quattro-verified
+  python3 /builder/quattro-candidate.py \
+    --input "$OMARCHY_CANDIDATE_ROOT" --output "$verified" \
+    --receipt-sha256 "$OMARCHY_CANDIDATE_RECEIPT_SHA256" \
+    --source-revision "$OMARCHY_CANDIDATE_SOURCE"
+  local primary filename
+  primary=$(jq -er '.primary_fingerprint' /builder/quattro-trust/policy.json)
+  pacman-key --add /builder/quattro-trust/public.gpg
+  pacman-key --lsign-key "$primary"
+  local -a archives=()
+  mapfile -t candidate_package_files < <(jq -er '.packages[].filename' "$verified/manifest.json")
+  for filename in "${candidate_package_files[@]}"; do
+    cp "$verified/$filename" "$verified/$filename.sig" "$offline_mirror_dir/"
+    archives+=("$offline_mirror_dir/$filename")
+  done
+  repo-add "$offline_mirror_dir/quattro-candidates.db.tar.gz" "${archives[@]}"
+  # This is a private build config, with candidates ahead of the old runtime
+  # snapshot. Every package still requires a verified signature.
+  awk '/^\[arm-snapshots\]$/ {
+    print "[quattro-candidates]"
+    print "SigLevel = Required DatabaseOptional"
+    print "Server = file:///var/cache/airootfs/var/cache/omarchy/mirror/offline"
+    print ""
+  } {print}' "$PACMAN_ONLINE_CONFIG" >/tmp/pacman-quattro-candidates.conf
+  PACMAN_ONLINE_CONFIG=/tmp/pacman-quattro-candidates.conf
+  local evidence=/out/build-evidence/$OMARCHY_BUILD_RUN_ID/candidate-inputs
+  mkdir -p "$evidence"
+  cp "$verified/signing.json" "$verified/signing.json.sig" \
+    "$verified/manifest.json" "$verified/manifest.json.sig" "$evidence/"
+}
+
+verify_quattro_candidate_selection() {
+  [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]] || return 0
+  local filename
+  for filename in "${candidate_package_files[@]}"; do
+    grep -Fxq "$filename" "$requested_package_files" || {
+      echo "Candidate package was not selected: $filename" >&2
+      return 1
+    }
+  done
+  if grep -Eq '^omarchy-(dev|settings-dev)-' "$requested_package_files"; then
+    echo "Old desktop package selected alongside the quattro candidate" >&2
+    return 1
+  fi
+}

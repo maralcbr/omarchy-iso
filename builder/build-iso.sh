@@ -30,6 +30,12 @@ prepare_verified_package_cache
 source /builder/checkpoint-offline-repository-database.sh
 produce_offline_repository_database
 
+if [[ ${OMARCHY_CANDIDATE_PACKAGE_CHECK:-0} == 1 ]]; then
+  source /builder/quattro-package-install-check.sh
+  run_quattro_package_install_check
+  exit 0
+fi
+
 source /builder/asahi-stages/configured-runtime-inputs.sh
 prepare_configured_runtime_inputs
 source /builder/asahi-stages/finalized-runtime-inputs.sh

@@ -60,4 +60,7 @@ test/unit/test_provisioning_state.py
 test/unit/test_run_manifest.py
 test/unit/test_summarize_asahi_build.py
 test/unit/test_target_packages.py
+test/unit/test_quattro_candidate.py
 test/unit/asahi-native-esp-marker-test.sh
+test/unit/quattro-candidate-packages-test.sh
+test/unit/quattro-package-install-check-test.sh

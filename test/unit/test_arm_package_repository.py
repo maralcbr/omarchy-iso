@@ -40,6 +40,19 @@ class ArmPackageRepositoryTest(unittest.TestCase):
         run.assert_not_called()
         self.assertFalse((self.target / "etc/pacman.conf").exists())
 
+    def test_candidate_does_not_claim_old_runtime_release(self) -> None:
+        for name in ("arm-repository", "arm-runtime", "arm-runtime-channel",
+                     "pacman-online-installed-arm.conf", "omarchy-arm-repository.asc"):
+            (self.media / name).write_text("baseline fixture")
+        (self.media / "candidate-signing.json").write_text('{"candidate_only": true}')
+        with patch.dict(os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}), patch("subprocess.run"):
+            phases_impl.configure_arm_package_repository(self.ctx)
+        state = self.target / "var/lib/omarchy"
+        self.assertFalse((state / "asahi-quattro-release").exists())
+        self.assertFalse((state / "package-snapshots/ARM-RUNTIME").exists())
+        self.assertEqual((state / "package-snapshots/QUATTRO-CANDIDATE.json").read_text(),
+                         '{"candidate_only": true}')
+
     def test_arm_media_installs_pinned_config_key_and_records(self) -> None:
         inputs = {
             "arm-repository": "repository record\n",
