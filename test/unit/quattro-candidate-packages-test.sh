@@ -18,6 +18,13 @@ configure_package_architecture
 [[ $OMARCHY_RUNTIME_PACKAGE == "omarchy" && $OMARCHY_SETTINGS_PACKAGE == "omarchy-settings" ]]
 [[ $TARGET_BASE_PACKAGE_LIST == "omarchy-base.packages" ]]
 [[ $(printf 'snapper\nlinux\n' | filter_target_packages) == $'snapper\nlinux-asahi' ]]
+# Shared optional manifests must not pull Intel/T2/NVIDIA drivers into Apple
+# images; unknown packages remain visible so missing requirements fail closed.
+[[ $(printf '%s\n' linux-t2 apple-bcm-firmware nvidia-utils intel-media-driver mise-bin omarchy-mac required-new-package | filter_target_packages) == $'mise\nomarchy-mac\nrequired-new-package' ]]
+(
+  unset OMARCHY_CANDIDATE_ROOT
+  [[ $(printf '%s\n' linux-t2 mise-bin | filter_target_packages) == $'linux-t2\nmise-bin' ]]
+)
 candidate_package_files=(omarchy-1.pkg.tar.xz omarchy-settings-1.pkg.tar.xz omarchy-mac-1.pkg.tar.xz)
 requested_package_files=$work/selected
 printf '%s\n' "${candidate_package_files[@]}" >"$requested_package_files"

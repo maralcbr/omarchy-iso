@@ -126,6 +126,19 @@ filter_target_packages() {
 
   while IFS= read -r line || [[ -n $line ]]; do
     if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon ]]; then
+      # Shared Quattro manifests include other machines' optional drivers.
+      # Keep this an explicit hardware policy, never a skip-if-unavailable rule:
+      # missing required Apple packages must still fail dependency resolution.
+      if [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]]; then
+        case "$line" in
+          apple-bcm-firmware|apple-t2-audio-config|broadcom-wl-dkms|dell-xps13-sidecar-amps|dell-xps-touchpad-haptics|intel-ipu7-camera|intel-lpmd|intel-media-driver|libva-intel-driver|linux-omarchy|linux-omarchy-headers|linux-t2|linux-t2-headers|macbook12-spi-driver-dkms|qmk-hid|t2fanrd|thermald|tuxedo-drivers-nocompatcheck-dkms|vpl-gpu-rt|yt6801-dkms|asusctl|vulkan-intel|vulkan-radeon|linux-firmware-marvell|libvpl|egl-wayland|nvidia-dkms|nvidia-open-dkms|nvidia-580xx-dkms|nvidia-580xx-utils|nvidia-utils|lib32-nvidia-580xx-utils|lib32-nvidia-utils|libva-nvidia-driver|yay-debug)
+            continue
+            ;;
+          mise-bin)
+            line=mise
+            ;;
+        esac
+      fi
       case "$line" in
         amd-ucode|intel-ucode|limine-mkinitcpio-hook|limine-snapper-sync|sof-firmware)
           continue
