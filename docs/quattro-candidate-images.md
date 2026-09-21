@@ -69,3 +69,19 @@ The short transaction passed in run `20260921T190609Z-1975436` in 31 seconds, wi
 Full image setup then failed in `install/login/grub-splash.sh`: it invokes `mkinitcpio -P` while the configured stage has deferred preset generation until boot finalization (`No presets found in /etc/mkinitcpio.d`). Apple audio setup also reported `target not found: rtkit` and an incomplete protected audio stack. Hardware setup fetched video-decoding packages through the installed online repository configuration, so complete offline hardware-package closure is not yet established either. Resolve the setup/finalization ordering and hardware dependency/repository inputs before another image qualification attempt; do not treat the package transaction as full image success.
 
 Logs: `/home/scott/code/omarchy-iso-worktrees/quattro-trial/package-check-35639858283.log` and `diagnostic-image-35639858283.log`. The failed image run cleaned up its container and file-backed loop devices. No physical install, dev-link change, image publication, or encrypted owner-setup test was performed.
+
+
+## Kernel-preset and audio follow-up: 2026-09-21
+
+Local commits `34cfc63` and `99da17e` stage the Asahi kernel and preset before the desktop system finalizer and include `rtkit` in the recorded Apple package targets. Boot finalization still rebuilds the initramfs after hardware setup. Regression coverage checks both supported kernel selections, the preset's availability when runtime setup starts, and failure before setup when the kernel is missing. All 68 portable test files passed as a non-root user; the ledger and logs are `test-runs/preset-fix.json` and `test-runs/preset-fix.log`.
+
+The diagnostic rebuild used the same authenticated desktop revision and receipt recorded above. `diagnostic-image-preset-fix.log` confirms that Snapper configuration, Apple audio setup, and GRUB splash/initramfs setup all completed. The configured-stage capture then rejected `avd-fw` because hardware setup had fetched it from edge outside the verified offline repository. This is a successful rejection of an unrecorded dependency, not a completed image or boot test. The disposable container was removed after the failure.
+
+Two optional video-decoder dependencies need a delivery decision before the next build. The edge release currently provides these archives without detached signatures:
+
+- `avd-fw-0.1-1-any.pkg.tar.xz`, SHA256 `1e45a05995f7114b342c4e562108a06998a5bbfdb889ac4eee46f00895cd4f16`.
+- `libva-v4l2_request-avd-1.3-1-aarch64.pkg.tar.xz`, SHA256 `95954647e1f3fb818e9ee1d90d23fc2d2f88c6b70be14cd3462a2aa801179199`.
+
+These hashes identify the observed GitHub release assets; they do not satisfy the image builder's package-signature contract. Prefer candidate-only builds and signatures for these dependencies, followed by explicit inclusion in the offline target set. Alternatively, explicitly defer optional video acceleration for the first trial through a tested installer interface. Do not bypass the image ownership/signature checks or silently treat mutable edge downloads as verified inputs.
+
+M3 host readiness still needs its SSH address, exact model/macOS version, free space, and backup confirmation. No physical M3 installation, image publication, encryption trial, or active desktop change has occurred.
