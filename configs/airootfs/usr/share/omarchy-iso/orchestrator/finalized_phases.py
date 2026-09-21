@@ -488,6 +488,31 @@ def configure_arm_package_repository(ctx: InstallContext) -> None:
     pacman_config = media_root / "pacman-online-installed-arm.conf"
     public_key = media_root / "omarchy-arm-repository.asc"
 
+    dependency_record = media_root / "dependency-manifest.json"
+    if dependency_record.is_file():
+        candidate_record = media_root / "candidate-signing.json"
+        dependency_signature = media_root / "dependency-manifest.json.sig"
+        candidate_config = media_root / "pacman-online-installed-quattro.conf"
+        for required in (candidate_record, dependency_signature, candidate_config):
+            if not required.is_file():
+                raise RuntimeError(f"Candidate package input is missing: {required}")
+        target_state = ctx.target / "var/lib/omarchy/package-snapshots"
+        target_state.mkdir(parents=True, exist_ok=True)
+        for source, name in ((candidate_record, "QUATTRO-CANDIDATE.json"),
+                             (dependency_record, "DEPENDENCIES.json"),
+                             (dependency_signature, "DEPENDENCIES.json.sig")):
+            shutil.copy(source, target_state / name)
+        for name in ("ARM-REPOSITORY", "ARM-RUNTIME"):
+            (target_state / name).unlink(missing_ok=True)
+        (ctx.target / "var/lib/omarchy/asahi-quattro-release").unlink(missing_ok=True)
+        shutil.copy(candidate_config, ctx.target / "etc/pacman.conf")
+        sync_dir = ctx.target / "var/lib/pacman/sync"
+        if sync_dir.is_dir():
+            for stale in sync_dir.iterdir():
+                stale.unlink()
+        subprocess.run(["pacman", "--sysroot", str(ctx.target), "--disable-sandbox", "--noconfirm", "-Sy"], check=True)
+        return
+
     if not repository_record.exists():
         return
     for required in (runtime_record, channel_record, pacman_config, public_key):

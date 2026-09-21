@@ -17,6 +17,13 @@ prepare_finalized_runtime_inputs() {
   else
     rm -f "$runtime_root/candidate-signing.json"
   fi
+  if [[ -n ${OMARCHY_DEPENDENCY_ROOT:-} ]]; then
+    install -m 0644 "$OMARCHY_DEPENDENCY_ROOT/manifest.json" "$runtime_root/dependency-manifest.json"
+    install -m 0644 "$OMARCHY_DEPENDENCY_ROOT/manifest.json.sig" "$runtime_root/dependency-manifest.json.sig"
+    rm -f "$runtime_root"/arm-{repository,runtime,runtime-channel} "$runtime_root/omarchy-arm-repository.asc"
+    return
+  fi
+  rm -f "$runtime_root/dependency-manifest.json" "$runtime_root/dependency-manifest.json.sig"
   install -m 0644 "$offline_mirror_dir/ARM-REPOSITORY" \
     "$runtime_root/arm-repository"
   install -m 0644 "$offline_mirror_dir/ARM-RUNTIME" \

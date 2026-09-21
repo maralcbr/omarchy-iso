@@ -53,6 +53,20 @@ class ArmPackageRepositoryTest(unittest.TestCase):
         self.assertEqual((state / "package-snapshots/QUATTRO-CANDIDATE.json").read_text(),
                          '{"candidate_only": true}')
 
+    def test_dependency_snapshot_does_not_install_inherited_feed(self) -> None:
+        for name in ("dependency-manifest.json", "dependency-manifest.json.sig", "candidate-signing.json"):
+            (self.media / name).write_text("fixture")
+        config = "[omarchy-aarch64]\nServer = https://example.invalid/edge\n"
+        (self.media / "pacman-online-installed-quattro.conf").write_text(config)
+        with patch.dict(os.environ, {"OMARCHY_ISO_MEDIA_ROOT": str(self.media)}), patch("subprocess.run") as run:
+            phases_impl.configure_arm_package_repository(self.ctx)
+        self.assertEqual((self.target / "etc/pacman.conf").read_text(), config)
+        self.assertEqual(run.call_count, 1)
+        self.assertNotIn("pacman-key", str(run.call_args))
+        state = self.target / "var/lib/omarchy/package-snapshots"
+        self.assertTrue((state / "DEPENDENCIES.json.sig").is_file())
+        self.assertFalse((state / "ARM-REPOSITORY").exists())
+
     def test_arm_media_installs_pinned_config_key_and_records(self) -> None:
         inputs = {
             "arm-repository": "repository record\n",

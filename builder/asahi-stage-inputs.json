@@ -27,7 +27,8 @@
         "bin/omarchy-iso-boot",
         "builder/build-iso.sh",
         "builder/pinned-node-cache.py",
-        "builder/quattro-candidate.py"
+        "builder/quattro-candidate.py",
+        "builder/quattro-dependencies.py"
       ],
       "runtime_inputs": [],
       "runtime_settings": [],
@@ -55,7 +56,8 @@
         "configs/profiledef.sh",
         "builder/quattro-candidate.py",
         "builder/quattro-trust/public.gpg",
-        "builder/quattro-trust/policy.json"
+        "builder/quattro-trust/policy.json",
+        "builder/quattro-dependencies.py"
       ],
       "lock_paths": [
         "builder"
@@ -94,6 +96,10 @@
         {
           "path": "candidate-signing.json",
           "required": false
+        },
+        {
+          "path": "dependency-manifest.json",
+          "required": false
         }
       ],
       "runtime_settings": [
@@ -115,7 +121,9 @@
         "builder/install-apple-platform-keyring.sh",
         "builder/pinned-node-cache.py",
         "builder/quattro-candidate.py",
-        "builder/quattro-candidate-packages.sh"
+        "builder/quattro-candidate-packages.sh",
+        "builder/quattro-dependencies.py",
+        "builder/quattro-dependencies.sh"
       ],
       "control_entrypoints": [
         "bin/omarchy-iso-make",
@@ -152,7 +160,9 @@
         "builder/quattro-candidate.py",
         "builder/quattro-candidate-packages.sh",
         "builder/quattro-trust/public.gpg",
-        "builder/quattro-trust/policy.json"
+        "builder/quattro-trust/policy.json",
+        "builder/quattro-dependencies.py",
+        "builder/quattro-dependencies.sh"
       ],
       "admission_paths": [
         "bin/omarchy-iso-make",
@@ -345,15 +355,15 @@
       "runtime_inputs": [
         {
           "path": "arm-repository",
-          "required": true
+          "required": false
         },
         {
           "path": "arm-runtime",
-          "required": true
+          "required": false
         },
         {
           "path": "arm-runtime-channel",
-          "required": true
+          "required": false
         },
         {
           "path": "install-debug",
@@ -365,10 +375,18 @@
         },
         {
           "path": "omarchy-arm-repository.asc",
-          "required": true
+          "required": false
         },
         {
           "path": "candidate-signing.json",
+          "required": false
+        },
+        {
+          "path": "dependency-manifest.json",
+          "required": false
+        },
+        {
+          "path": "dependency-manifest.json.sig",
           "required": false
         }
       ],
@@ -424,7 +442,8 @@
         "configs/airootfs/usr/share/omarchy-iso/orchestrator/configured_phases.py",
         "configs/airootfs/usr/share/omarchy-iso/orchestrator/finalized_phases.py",
         "configs/airootfs/usr/share/omarchy-iso/orchestrator/target_packages.py",
-        "configs/airootfs/usr/share/omarchy-iso/orchestrator/ui.py"
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/ui.py",
+        "configs/airootfs/usr/share/omarchy-iso/pacman-online-installed-quattro.conf"
       ],
       "admission_paths": [
         "builder/asahi-checkpoint-admission.sh",

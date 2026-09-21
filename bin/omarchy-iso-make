@@ -20,6 +20,8 @@ KEEP_PKG_CACHE=""
 LOCAL_OMARCHY_PATH=""
 LOCAL_PKGS_PATH=""
 CANDIDATE_INPUT=""
+DEPENDENCY_INPUT=""
+OMARCHY_DEPENDENCY_SHA256=""
 CANDIDATE_PACKAGE_CHECK=0
 OMARCHY_CANDIDATE_RECEIPT_SHA256=""
 OMARCHY_CANDIDATE_SOURCE=""
@@ -121,6 +123,15 @@ while [[ $# -gt 0 ]]; do
     CANDIDATE_PACKAGE_CHECK=1
     shift
     ;;
+  --candidate-dependencies)
+    DEPENDENCY_INPUT=${2:-}
+    OMARCHY_DEPENDENCY_SHA256=${3:-}
+    if [[ -z $DEPENDENCY_INPUT || ! $OMARCHY_DEPENDENCY_SHA256 =~ ^[a-f0-9]{64}$ ]]; then
+      echo "--candidate-dependencies requires DIRECTORY MANIFEST_SHA256" >&2
+      exit 1
+    fi
+    shift 3
+    ;;
   --candidate-packages)
     CANDIDATE_INPUT=${2:-}
     OMARCHY_CANDIDATE_RECEIPT_SHA256=${3:-}
@@ -160,7 +171,7 @@ while [[ $# -gt 0 ]]; do
     ;;
   *)
     echo "Unknown option: $1"
-    echo "Usage: $0 [--arch x86_64|aarch64] [--target x86_64/pc|aarch64/generic|aarch64/apple-silicon] [--artifact iso|asahi-os-package] [--product omarchy-mx-mac|omarchy-mx-mac-aurora] [--mode qualification|diagnostic] [--checkpoint-policy read-write|write-only] [--require-cache-hit-through configured-target] [--apple-media-validation-build] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>] [--candidate-packages DIRECTORY SIGNING_JSON_SHA256 SOURCE_COMMIT] [--candidate-package-check]"
+    echo "Usage: $0 [--arch x86_64|aarch64] [--target x86_64/pc|aarch64/generic|aarch64/apple-silicon] [--artifact iso|asahi-os-package] [--product omarchy-mx-mac|omarchy-mx-mac-aurora] [--mode qualification|diagnostic] [--checkpoint-policy read-write|write-only] [--require-cache-hit-through configured-target] [--apple-media-validation-build] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>] [--candidate-packages DIRECTORY SIGNING_JSON_SHA256 SOURCE_COMMIT] [--candidate-dependencies DIRECTORY MANIFEST_SHA256] [--candidate-package-check]"
     exit 1
     ;;
   esac
@@ -243,6 +254,10 @@ asahi_full_os_package=0
 if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon &&
   $OMARCHY_ARTIFACT_KIND == asahi-os-package ]]; then
   asahi_full_os_package=1
+fi
+if [[ -n $DEPENDENCY_INPUT && -z $CANDIDATE_INPUT ]]; then
+  echo "--candidate-dependencies requires --candidate-packages" >&2
+  exit 1
 fi
 if (( CANDIDATE_PACKAGE_CHECK )) && [[ -z $CANDIDATE_INPUT ]]; then
   echo "--candidate-package-check requires --candidate-packages" >&2
@@ -478,6 +493,11 @@ if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon &&
       --input "$CANDIDATE_INPUT" --output "$HOST_BUILD_STATE/candidate-packages" \
       --receipt-sha256 "$OMARCHY_CANDIDATE_RECEIPT_SHA256" \
       --source-revision "$OMARCHY_CANDIDATE_SOURCE"
+  fi
+  if [[ -n $DEPENDENCY_INPUT ]]; then
+    python3 "$BUILD_ROOT/builder/quattro-dependencies.py" \
+      --input "$DEPENDENCY_INPUT" --output "$HOST_BUILD_STATE/dependency-packages" \
+      --manifest-sha256 "$OMARCHY_DEPENDENCY_SHA256"
   fi
   ASAHI_STAGE_INPUT_ROOT=$HOST_BUILD_STATE/stage-inputs
   python3 "$BUILD_ROOT/builder/asahi_stage_inputs.py" generate \
@@ -889,6 +909,13 @@ if [[ -n $CANDIDATE_INPUT ]]; then
     -v "$HOST_BUILD_STATE/candidate-packages:/omarchy-candidate-packages:ro"
   )
 fi
+if [[ -n $DEPENDENCY_INPUT ]]; then
+  DOCKER_ARGS+=(
+    -e "OMARCHY_DEPENDENCY_ROOT=/omarchy-dependency-packages"
+    -e "OMARCHY_DEPENDENCY_SHA256=$OMARCHY_DEPENDENCY_SHA256"
+    -v "$HOST_BUILD_STATE/dependency-packages:/omarchy-dependency-packages:ro"
+  )
+fi
 if [[ -n $LOCAL_OMARCHY_PATH ]]; then
   DOCKER_ARGS+=(
     -v "$LOCAL_OMARCHY_PATH:/omarchy-source:ro"
@@ -907,6 +934,7 @@ if [[ -z "$NO_CACHE" ]]; then
   [[ $OMARCHY_ARCH == "x86_64" ]] || cache_scope+="_${OMARCHY_ARCH}"
   [[ $OMARCHY_MEDIA_TARGET != "aarch64/apple-silicon" ]] || cache_scope+="_apple_silicon"
   [[ -z $CANDIDATE_INPUT ]] || cache_scope+="_quattro_candidates"
+  [[ -z $DEPENDENCY_INPUT ]] || cache_scope+="_dependencies"
   cache_base=${ASAHI_CACHE_BASE:-${XDG_CACHE_HOME:-$HOME/.cache}/omarchy}
   OFFLINE_REPO_BUILD_CACHE_DIR="$cache_base/$cache_scope/airootfs/var/cache/omarchy"
   if (( asahi_full_os_package )); then

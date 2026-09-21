@@ -42,11 +42,11 @@ class CandidateTest(unittest.TestCase):
         cls.bundle = cls.base / 'bundle'
         cls.bundle.mkdir()
         packages = []
-        for name in sorted(c.NAMES | c.VIDEO_NAMES if cls.schema == 2 else c.NAMES):
+        for name in sorted(c.NAMES | c.VIDEO_NAMES | c.EXTRA_NAMES if cls.schema == 3 else (c.NAMES | c.VIDEO_NAMES if cls.schema == 2 else c.NAMES)):
             deps = ['omarchy-settings=1.0'] if name == 'omarchy' else []
-            content = {'.PKGINFO': '\n'.join([f'pkgname = {name}', 'pkgver = 1.0-1', 'arch = any' if name == 'avd-fw' else 'arch = aarch64', *['depend = ' + d for d in deps]])}
+            content = {'.PKGINFO': '\n'.join([f'pkgname = {name}', 'pkgver = 1.0-1', 'arch = any' if name in ('avd-fw', 'tobi-try') else 'arch = aarch64', *['depend = ' + d for d in deps]])}
             revision = 'usr/share/omarchy-mac/source-revision' if name == 'omarchy-mac' else f'usr/share/doc/{name}/source-revision'
-            content[revision] = ('b' * 40 if name in c.VIDEO_NAMES else cls.source) + '\n'
+            content[revision] = ('b' * 40 if name not in c.NAMES else cls.source) + '\n'
             if name == 'omarchy':
                 for label in ('base', 'apple'):
                     filename = f'omarchy-{label}.packages'
@@ -90,7 +90,7 @@ class CandidateTest(unittest.TestCase):
                           kwargs.get('source', self.source), kwargs.get('trust', self.trust))
 
     def test_signed_set_creates_readonly_snapshot(self):
-        self.assertEqual(len(self.verify()['packages']), 5 if self.schema == 2 else 3)
+        self.assertEqual(len(self.verify()['packages']), 9 if self.schema == 3 else (5 if self.schema == 2 else 3))
         self.assertEqual((self.work / 'output').stat().st_mode & 0o777, 0o555)
 
     def test_tampered_archive(self):
@@ -152,6 +152,17 @@ class VideoCandidateTest(CandidateTest):
     def test_missing_video_package(self):
         data = json.loads((self.input / 'manifest.json').read_text())
         data['packages'] = [p for p in data['packages'] if p['name'] != 'avd-fw']
+        checksum = self.resign_manifest(data)
+        with self.assertRaisesRegex(ValueError, 'wrong package set'):
+            self.verify(checksum=checksum)
+
+
+class CompleteCandidateTest(VideoCandidateTest):
+    schema = 3
+
+    def test_missing_static_binfmt_package(self):
+        data = json.loads((self.input / 'manifest.json').read_text())
+        data['packages'] = [p for p in data['packages'] if p['name'] != 'qemu-user-static-binfmt']
         checksum = self.resign_manifest(data)
         with self.assertRaisesRegex(ValueError, 'wrong package set'):
             self.verify(checksum=checksum)

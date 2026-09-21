@@ -14,6 +14,9 @@ prepare_verified_package_runtime_manifest() {
   if [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]]; then
     cp "$OMARCHY_CANDIDATE_ROOT/signing.json" "$runtime_root/candidate-signing.json"
   fi
+  if [[ -n ${OMARCHY_DEPENDENCY_ROOT:-} ]]; then
+    cp "$OMARCHY_DEPENDENCY_ROOT/manifest.json" "$runtime_root/dependency-manifest.json"
+  fi
   verified_package_runtime_manifest=$runtime_root/runtime-manifest.json
   python3 /builder/asahi_stage_inputs.py runtime-manifest \
     --root "$runtime_root" \
@@ -121,6 +124,12 @@ initialize_verified_package_cache_stage() {
 prepare_verified_package_snapshots_and_trust() {
   if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon ]]; then
     /builder/validate-apple-platform-snapshot.sh "$OMARCHY_APPLE_PLATFORM_SNAPSHOT"
+  fi
+
+  if [[ -n ${OMARCHY_DEPENDENCY_ROOT:-} ]]; then
+    source /builder/quattro-dependencies.sh
+    prepare_quattro_dependency_packages
+    return
   fi
 
   if [[ $OMARCHY_ARCH == aarch64 ]]; then

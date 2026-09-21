@@ -80,3 +80,30 @@ done
 failure=none; video_revision=wrong; OMARCHY_BUILD_RUN_ID=wrong-video-revision
 if run_quattro_package_install_check; then exit 1; fi
 printf 'PASS: fast package check records success only after transaction and version checks\n'
+# The dependency-snapshot path exercises the full base list, not just candidates.
+python3 - "$OMARCHY_CANDIDATE_ROOT/manifest.json" <<'PYTEST'
+import json, sys
+from pathlib import Path
+p=Path(sys.argv[1]); data=json.loads(p.read_text())
+data['packages'] += [{'name':name,'version':'1-1'} for name in ('asdcontrol','tobi-try','qemu-user-static','qemu-user-static-binfmt')]
+p.write_text(json.dumps(data))
+PYTEST
+OMARCHY_DEPENDENCY_ROOT=$work/dependencies
+OMARCHY_NVIM_PACKAGE=omarchy-nvim
+shipped_base_packages=$work/base.packages
+printf '%s\n' '# base fixture' base neovim dotnet-runtime-bin >"$shipped_base_packages"
+pacstrap() {
+  [[ ${*:6} == "base omarchy omarchy-settings omarchy-mac avd-fw libva-v4l2_request-avd asdcontrol tobi-try qemu-user-static qemu-user-static-binfmt base neovim dotnet-runtime-bin omarchy-nvim" ]]
+  desktop_pacstrap "${@:1:9}"
+  for name in avd-fw libva-v4l2_request-avd asdcontrol tobi-try qemu-user-static qemu-user-static-binfmt; do
+    mkdir -p "$5/usr/share/doc/$name"
+    printf 'recipe-fixture\n' >"$5/usr/share/doc/$name/source-revision"
+  done
+}
+pacman() {
+  for name in omarchy omarchy-settings omarchy-mac avd-fw libva-v4l2_request-avd asdcontrol tobi-try qemu-user-static qemu-user-static-binfmt; do
+    printf '%s 1-1\n' "$name"
+  done
+}
+failure=none; OMARCHY_BUILD_RUN_ID=nine-with-full-base
+run_quattro_package_install_check

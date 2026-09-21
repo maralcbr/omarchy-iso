@@ -49,3 +49,8 @@ if env -u SOURCE_DATE_EPOCH bash "$ROOT/bin/omarchy-iso-make" \
   exit 1
 fi
 grep -q 'Candidate image builds require a nonnegative SOURCE_DATE_EPOCH' "$work/error"
+
+(
+  export OMARCHY_DEPENDENCY_ROOT=$work/dependencies
+  [[ $(printf '%s\n' mise-bin dotnet-runtime omarchy-mac | filter_target_packages) == $'mise-bin\ndotnet-runtime-bin\nomarchy-mac' ]]
+)
