@@ -14,11 +14,14 @@ The private online build configuration selects a local candidate repository befo
 
 Use the package check first. It runs the same signature, dependency-download and offline-repository validation stages as the image build, then performs a real pacstrap transaction in a disposable directory root. It installs the three candidates and their runtime dependencies, executes package hooks, and verifies installed versions and source markers. It stops before filesystem image creation, hardware setup, boot finalization and release compression. This is installation evidence, not boot evidence.
 
+Record and reuse the same `SOURCE_DATE_EPOCH` for a candidate; the command below initially takes it from the builder commit. Candidate builds reject a missing epoch before Docker starts.
+
 The host needs Bash 5, Python 3.11+, GnuPG, bsdtar, the existing builder prerequisites, and working Docker access. Use a private disk-backed temporary directory outside the checkout, and preserve the same checkpoint/cache root across runs. Run from this checkout:
 
 ```bash
 mkdir -p "$HOME/.cache/omarchy-quattro-build-tmp"
 chmod 700 "$HOME/.cache/omarchy-quattro-build-tmp"
+SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
 TMPDIR="$HOME/.cache/omarchy-quattro-build-tmp" \
   bash bin/omarchy-iso-make \
   --target aarch64/apple-silicon --artifact asahi-os-package \

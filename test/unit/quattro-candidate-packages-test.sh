@@ -42,3 +42,10 @@ for mode in qualification diagnostic; do
   grep -q 'Candidate packages require' "$work/error"
 done
 printf 'PASS: candidate roles, retained Snapper, exact package selection and CLI guards\n'
+
+if env -u SOURCE_DATE_EPOCH bash "$ROOT/bin/omarchy-iso-make" \
+  --target aarch64/apple-silicon --artifact asahi-os-package --mode diagnostic \
+  --candidate-packages "$work" "$(printf '%064d' 0)" "$(printf '%040d' 0)" >"$work/error" 2>&1; then
+  exit 1
+fi
+grep -q 'Candidate image builds require a nonnegative SOURCE_DATE_EPOCH' "$work/error"
