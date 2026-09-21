@@ -218,6 +218,25 @@ class AsahiConfiguredTargetTests(unittest.TestCase):
             self.checkpoint_manifest["checkpoint_identity"],
         )
 
+    def test_base_manifest_accepts_installed_provider(self) -> None:
+        path = self.runtime / "omarchy-base.packages"
+        path.write_text(path.read_text() + "nvim\n")
+        self.runtime_manifest = self.module.build_runtime_manifest_for_test(
+            self.runtime,
+            required=("expected-package-closure", "expected-packages", "omarchy-base.packages", "package-targets"),
+            optional=("install-debug",),
+        )
+        with self.assertRaisesRegex(self.module.ConfiguredTargetError, "absent: nvim"):
+            self.capture()
+        desc = next((self.target / "var/lib/pacman/local").glob("bash-*/desc"))
+        desc.write_text(desc.read_text() + "\n%PROVIDES%\nnvim=0.12.5\n")
+        self.capture()
+
+    def test_provider_cannot_replace_required_kernel(self) -> None:
+        desc = next((self.target / "var/lib/pacman/local").glob("bash-*/desc"))
+        desc.write_text(desc.read_text() + "\n%PROVIDES%\nlinux-asahi\n")
+        self.test_missing_required_package_fails_closed()
+
     def test_missing_required_package_fails_closed(self) -> None:
         package = next(
             (self.target / "var/lib/pacman/local").glob("linux-asahi-*")

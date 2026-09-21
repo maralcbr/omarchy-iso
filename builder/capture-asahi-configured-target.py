@@ -306,6 +306,21 @@ def installed_packages(target: Path) -> dict[str, str]:
     return packages
 
 
+def installed_provides(target: Path) -> set[str]:
+    """Read aliases only after installed_packages validates the local database."""
+    provided: set[str] = set()
+    for desc in (target / "var/lib/pacman/local").glob("*/desc"):
+        active = False
+        for line in desc.read_text(errors="strict").splitlines():
+            if line.startswith("%"):
+                active = line == "%PROVIDES%"
+            elif active and line:
+                # Package lists contain unversioned targets. Do not invent
+                # version satisfaction here; pacman resolves the exact closure.
+                provided.add(line.split("=", 1)[0])
+    return provided
+
+
 def _expected_esp_uuid(volume_id: str) -> str:
     if re.fullmatch(r"0x[0-9a-fA-F]{8}", volume_id) is None:
         raise ConfiguredTargetError("configured ESP volume id is invalid")
@@ -511,9 +526,14 @@ def capture_configured_target(
     runtime_files = _runtime_files_by_path(runtime_root, runtime_manifest)
     required_packages = REQUIRED_PLATFORM_PACKAGES | {product["kernel_package"]} | _package_targets(
         runtime_files["package-targets"]
-    ) | _package_list(runtime_files["omarchy-base.packages"])
+    )
     for name in sorted(required_packages):
         if name not in packages:
+            raise ConfiguredTargetError(f"required configured package is absent: {name}")
+
+    provided = installed_provides(target)
+    for name in sorted(_package_list(runtime_files["omarchy-base.packages"])):
+        if name not in packages and name not in provided:
             raise ConfiguredTargetError(f"required configured package is absent: {name}")
 
     expected_packages = expected_package_closure(
