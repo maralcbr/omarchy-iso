@@ -80,16 +80,28 @@ checkpoint_verified_package_cache() {
       --snapshot-lock aurora-list="$offline_mirror_dir/AURORA-PACKAGES"
     )
   fi
+  local repository_locks=()
+  if [[ -n ${OMARCHY_DEPENDENCY_ROOT:-} ]]; then
+    repository_locks=(
+      --snapshot-lock candidate-receipt="$OMARCHY_CANDIDATE_ROOT/signing.json"
+      --snapshot-lock dependency-manifest="$OMARCHY_DEPENDENCY_ROOT/manifest.json"
+      --snapshot-lock dependency-origin="$OMARCHY_DEPENDENCY_ROOT/origin.db"
+      --snapshot-lock hyprland-repair=/builder/quattro-hyprland-repair.json
+    )
+  else
+    repository_locks=(
+      --snapshot-lock arm-snapshot=/builder/arm-package-snapshots.conf
+      --snapshot-lock arm-repository="$offline_mirror_dir/ARM-REPOSITORY"
+      --snapshot-lock arm-runtime="$offline_mirror_dir/ARM-RUNTIME"
+      --snapshot-lock arm-packages="$offline_mirror_dir/ARM-PACKAGES"
+    )
+  fi
   python3 /builder/capture-asahi-offline-repository.py \
     --mirror "$offline_mirror_dir" \
     --requested-list "$requested_package_files" \
-    "${aurora_locks[@]}" \
+    "${aurora_locks[@]}" "${repository_locks[@]}" \
     --snapshot-lock package-source-lock="$package_cache_stage_root/source-lock.json" \
-    --snapshot-lock arm-snapshot=/builder/arm-package-snapshots.conf \
     --snapshot-lock apple-platform=/builder/apple-platform-snapshot.json \
-    --snapshot-lock arm-repository="$offline_mirror_dir/ARM-REPOSITORY" \
-    --snapshot-lock arm-runtime="$offline_mirror_dir/ARM-RUNTIME" \
-    --snapshot-lock arm-packages="$offline_mirror_dir/ARM-PACKAGES" \
     --snapshot-lock apple-packages="$offline_mirror_dir/APPLE-PACKAGES" \
     --snapshot-lock apple-keyring="$offline_mirror_dir/APPLE-KEYRING" \
     --output "$offline_repository_manifest"
