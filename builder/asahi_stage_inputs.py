@@ -551,7 +551,10 @@ def _discover_executed_local_inputs(
     repository: Path,
     entrypoint: str,
     declared: set[str],
+    direct_inputs: dict[str, tuple[set[str], set[str]]] | None = None,
 ) -> set[str]:
+    if direct_inputs is None:
+        direct_inputs = {}
     local_python_files = _local_python_files(repository)
     discovered: set[str] = set()
     visited: set[str] = set()
@@ -561,11 +564,13 @@ def _discover_executed_local_inputs(
         if relative_path in visited:
             continue
         visited.add(relative_path)
-        direct, explicitly_executed = _discover_direct_local_inputs(
-            repository,
-            relative_path,
-            local_python_files,
-        )
+        if relative_path not in direct_inputs:
+            direct_inputs[relative_path] = _discover_direct_local_inputs(
+                repository,
+                relative_path,
+                local_python_files,
+            )
+        direct, explicitly_executed = direct_inputs[relative_path]
         discovered.update(direct)
         traversable = explicitly_executed | {
             path
@@ -652,6 +657,10 @@ def validate_specification(
         for stage in stage_order
         if isinstance(stage, str)
     }
+    # Reuse direct edges only during this validation pass. Each entrypoint
+    # still traverses its own declared set and checks omissions independently;
+    # the next call must rediscover any edited files or newly added imports.
+    direct_inputs: dict[str, tuple[set[str], set[str]]] = {}
     earlier: set[str] = set()
     for stage in stage_order:
         if not isinstance(stage, str) or SAFE_STAGE.fullmatch(stage) is None:
@@ -771,6 +780,7 @@ def validate_specification(
                 repository,
                 entrypoint,
                 all_declared,
+                direct_inputs,
             )
             for omitted in sorted(discovered - all_declared - set(dispatches)):
                 raise StageInputError(

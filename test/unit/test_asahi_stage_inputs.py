@@ -381,6 +381,75 @@ class AsahiStageInputTests(unittest.TestCase):
             ):
                 self.module.validate_specification(repository, specification)
 
+    def test_shared_import_cache_keeps_each_stage_declaration_independent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            (repository / "builder").mkdir()
+            for name, text in {
+                "first.py": "import shared\n",
+                "second.py": "import shared\n",
+                "shared.py": "import required\n",
+                "required.py": "VALUE = 1\n",
+            }.items():
+                (repository / "builder" / name).write_text(text)
+
+            def stage(name: str, dependencies: list[str], sources: list[str]) -> dict:
+                return {
+                    "depends_on": dependencies,
+                    "entrypoints": [f"builder/{name}.py"],
+                    "source_paths": [f"builder/{name}.py", *sources],
+                    "admission_paths": [], "lock_paths": [],
+                    "runtime_inputs": [], "runtime_settings": [],
+                }
+
+            specification = {
+                "schema_version": 1,
+                "common_producer_inputs": [], "common_admission_inputs": [],
+                "stage_order": ["first", "second"],
+                "stages": {
+                    "first": stage("first", [], ["builder/shared.py", "builder/required.py"]),
+                    "second": stage("second", ["first"], ["builder/shared.py"]),
+                },
+            }
+            # Discovering required.py through the first entrypoint must not
+            # authorize that same transitive import for the second stage.
+            with self.assertRaisesRegex(
+                self.module.StageInputError,
+                "executed input is omitted from second: builder/required.py",
+            ):
+                self.module.validate_specification(repository, specification)
+            specification["stages"]["second"]["source_paths"].append("builder/required.py")
+            self.module.validate_specification(repository, specification)
+
+    def test_import_discovery_refreshes_after_mutations_between_validations(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary)
+            (repository / "builder").mkdir()
+            (repository / "builder/entry.py").write_text("import shared\n")
+            helper = repository / "builder/shared.py"
+            helper.write_text("VALUE = 1\n")
+            specification = {
+                "schema_version": 1,
+                "common_producer_inputs": [], "common_admission_inputs": [],
+                "stage_order": ["stage"],
+                "stages": {"stage": {
+                    "depends_on": [], "entrypoints": ["builder/entry.py"],
+                    "source_paths": ["builder/entry.py", "builder/shared.py"],
+                    "admission_paths": [], "lock_paths": [],
+                    "runtime_inputs": [], "runtime_settings": [],
+                }},
+            }
+            self.module.validate_specification(repository, specification)
+            (repository / "builder/added.py").write_text("VALUE = 2\n")
+            helper.write_text("import added\n")
+            with self.assertRaisesRegex(
+                self.module.StageInputError,
+                "executed input is omitted from stage: builder/added.py",
+            ):
+                self.module.validate_specification(repository, specification)
+            helper.write_text("VALUE = 1\n")
+            self.module.validate_specification(repository, specification)
+
     def test_declared_paths_reject_traversal_absolute_and_symlinks(self) -> None:
         def specification(path: str) -> dict:
             return {
