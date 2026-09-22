@@ -121,6 +121,12 @@ class AppleSiliconTargetSetTests(unittest.TestCase):
                     # archinstall's own install configuration
                     "zram-generator",
                     "gst-plugin-pipewire",
+                    "pipewire-alsa",
+                    "pipewire-jack",
+                    "pipewire-pulse",
+                    "libpulse",
+                    "wireplumber",
+                    "pipewire-audio",
                     # the target's Apple platform system finalizer
                     "vulkan-asahi",
                     "vulkan-mesa-implicit-layers",
@@ -185,7 +191,7 @@ class AppleSiliconTargetSetTests(unittest.TestCase):
         complete = set(target_packages.expected_package_targets(apple_plan()))
 
         self.assertEqual(complete - without_swap, {"zram-generator"})
-        self.assertEqual(complete - without_audio, {"gst-plugin-pipewire"})
+        self.assertEqual(complete - without_audio, {"gst-plugin-pipewire", "pipewire-alsa", "pipewire-jack", "pipewire-pulse", "libpulse", "wireplumber", "pipewire-audio"})
 
     def test_platform_finalizer_packages_are_apple_silicon_only(self) -> None:
         limine = set(

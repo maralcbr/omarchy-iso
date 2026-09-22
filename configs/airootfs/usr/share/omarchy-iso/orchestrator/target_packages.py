@@ -104,8 +104,16 @@ ARCHINSTALL_LIST_MIRROR_ONLY_PACKAGES = frozenset({"alsa-firmware"})
 # then drops the generic /etc config it writes, keeping the package).
 ARCHINSTALL_SWAP_PACKAGES = ("zram-generator",)
 
-# Audio: archinstall's audio configuration installs its backend package set.
-ARCHINSTALL_AUDIO_PACKAGES = {"pipewire": ("gst-plugin-pipewire",)}
+# Archinstall installs audio before the desktop package transaction. Declare the
+# whole backend set: the shared desktop list need not carry its ALSA adapter.
+# Pin pipewire-audio as the lv2-host provider already present at that later
+# transaction, avoiding an empty-root resolver selecting Ardour instead.
+ARCHINSTALL_AUDIO_PACKAGES = {
+    "pipewire": (
+        "pipewire", "pipewire-alsa", "pipewire-jack", "pipewire-pulse",
+        "gst-plugin-pipewire", "libpulse", "wireplumber", "pipewire-audio",
+    ),
+}
 
 # Packages the target's own system finalizer installs while configuring the
 # platform in chroot. The Apple Silicon path routes through Apple hardware
