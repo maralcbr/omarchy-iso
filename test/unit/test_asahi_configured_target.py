@@ -397,5 +397,55 @@ class AsahiConfiguredTargetTests(unittest.TestCase):
         self.assertNotIn("checkpoint_outputs", proof)
 
 
+class PrivateLimineConfiguredTargetTests(AsahiConfiguredTargetTests):
+    """Apply every exact-closure and provisioning regression to the private lane."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        path = ROOT / "builder/asahi_stage_inputs.py"
+        spec = importlib.util.spec_from_file_location("private_stage_inputs", path)
+        inputs = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(inputs)
+        product = json.loads(
+            (ROOT / "builder/products/omarchy-mx-mac-limine-private.json").read_text()
+        )
+        self.product_manifest = inputs.build_stage_product_manifest(
+            product=product, stage="configured-target"
+        )
+
+    def test_real_private_product_projection_is_admitted(self) -> None:
+        self.assertEqual(self.product_manifest["inputs"]["boot_backend"], "asahi-limine")
+        proof = self.capture_installed_state()
+        self.assertEqual(proof["validation"], {"result": "passed"})
+        self.assertEqual(proof["product_input_digest"], self.product_manifest["input_digest"])
+
+    def test_private_product_digest_still_binds_the_selected_backend(self) -> None:
+        self.product_manifest["inputs"]["boot_backend"] = "asahi-grub"
+        with self.assertRaisesRegex(self.module.ConfiguredTargetError, "product manifest.*digest"):
+            self.capture_installed_state()
+
+    def test_private_product_rejects_unqualified_backend_kernel_pairs(self) -> None:
+        for backend, kernel in (("limine", "linux-asahi"), ("unknown", "linux-asahi"),
+                                ("asahi-limine", "linux-aurora")):
+            with self.subTest(backend=backend, kernel=kernel):
+                values = {key: value for key, value in self.product_manifest.items()
+                          if key != "input_digest"}
+                values["inputs"] = dict(values["inputs"], boot_backend=backend, kernel_package=kernel)
+                with self.assertRaisesRegex(self.module.ConfiguredTargetError, "not a supported"):
+                    self.module.verify_product_manifest(self.module.with_digest(values))
+
+    def test_private_product_still_requires_the_configured_grub_bridge(self) -> None:
+        directory = next((self.target / "var/lib/pacman/local").glob("grub-*"))
+        (directory / "desc").unlink()
+        directory.rmdir()
+        with self.assertRaisesRegex(self.module.ConfiguredTargetError, "required configured package is absent: grub"):
+            self.capture_installed_state()
+
+    def test_existing_aurora_grub_product_remains_supported(self) -> None:
+        values = {key: value for key, value in self.product_manifest.items() if key != "input_digest"}
+        values["inputs"] = dict(values["inputs"], boot_backend="asahi-grub", kernel_package="linux-aurora")
+        self.module.verify_product_manifest(self.module.with_digest(values))
+
+
 if __name__ == "__main__":
     unittest.main()

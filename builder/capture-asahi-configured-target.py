@@ -191,9 +191,16 @@ def verify_product_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "root_filesystem_uuid",
     }:
         raise ConfiguredTargetError("configured product inputs are invalid")
-    if (
-        inputs["boot_backend"] != "asahi-grub"
-        or inputs["kernel_package"] not in SUPPORTED_KERNEL_PACKAGES
+    # The product names the final backend. The admitted private Limine product
+    # still uses the same GRUB bridge at this configured checkpoint; activation
+    # and byte-level Limine validation happen only in finalized-boot. Keep the
+    # private lane restricted to its measured Asahi kernel, while GRUB retains
+    # both existing kernel products. Signed private admission remains upstream.
+    backend = inputs["boot_backend"]
+    kernel = inputs["kernel_package"]
+    if not (
+        (backend == "asahi-grub" and kernel in SUPPORTED_KERNEL_PACKAGES)
+        or (backend == "asahi-limine" and kernel == "linux-asahi")
     ):
         raise ConfiguredTargetError("configured product is not a supported Apple Silicon target")
     return inputs
