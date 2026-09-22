@@ -19,3 +19,7 @@ Keep candidate packages/images private and signed under the existing build-input
 The signed candidate importer now verifies the explicit thirteen-package schema 4 as well as existing schemas 1–3. It checks the complete set, source provenance, signatures, payload ownership, ARM64 Limine template and conversion owner, and excludes the upstream repository key. Thirty-one offline importer tests passed with disposable signing keys.
 
 Image assembly deliberately refuses schema 4 immediately after authentication, before importing candidate trust or installing packages. This is a draft boundary: finalization, the disjoint dependency/platform closure, first-boot and factory-snapshot state, cache input declarations and authenticated VM lanes are not implemented yet. No new image has been built. The existing M3 baseline and schemas 1–3 retain their behavior. See the central runtime `docs/quattro-encryption-limine-source-port-2026-09-22.md` for exact scope and remaining qualification.
+
+## Review follow-up
+
+The central runtime source-port record now explicitly names `/var/lib/omarchy/mac-first-boot/deferred-steps` (paired with `mac-first-boot/pending`) and `/var/lib/omarchy/limine.enabled` as missing builder outputs, plus the separate owner `provisioning/pending` marker. Their creation belongs to coordinated image finalization and artifact inspection, including factory-state cleanup; neither is supplied by importing the excluded monorepo helper or touching a placeholder. The schema-4 image guard remains in place and the default schema-3 image is unchanged.
