@@ -41,6 +41,20 @@ class LimineContents(unittest.TestCase):
         installed.check_limine(verification, self.root, 'linux-asahi')
         self.assertEqual(verification.failed, [])
 
+    def test_inactive_grub_bridge_does_not_override_active_limine_root_contract(self):
+        path = self.root / 'boot/grub/grub.cfg'
+        path.write_text(path.read_text().replace('rootflags=subvol=@',
+                       'rootflags=subvol=@ rootflags=x-systemd.device-timeout=0'))
+        evidence = self.capture()
+        self.assertEqual(evidence['boot_contract']['retained_artifacts'],
+                         {'boot_grub_config': 'inactive-configured-bridge'})
+        self.assertIn('boot_grub_config', evidence['artifacts'])
+        self.assertNotIn('linux_entries', evidence['boot_contract'])
+        self.write('etc/default/limine', 'KERNEL_CMDLINE[default]="' +
+                   self.cmdline.replace(self.uuid, '87654321-1234-1234-1234-123456789abc') + '"\n')
+        with self.assertRaisesRegex(contents.MODULE.ContentEvidenceError, 'fstab'):
+            self.capture()
+
     def test_content_and_config_verifiers_reject_stale_embedded_initramfs(self):
         self.write('boot/efi/EFI/Linux/omarchy_linux-asahi.efi', fixture.pe({**self.sections, '.initrd': b'stale'}))
         with self.assertRaisesRegex(contents.MODULE.ContentEvidenceError, 'UKI .initrd'):

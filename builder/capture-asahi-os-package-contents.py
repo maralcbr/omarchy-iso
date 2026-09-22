@@ -211,29 +211,37 @@ def capture(target: Path, node_identity: dict, kernel: str) -> dict:
         name: _artifact(target, relative)
         for name, relative in paths.items()
     }
-    grub = _target_file(target, paths["boot_grub_config"]).read_text(
-        encoding="utf-8",
-        errors="strict",
-    )
-    for token in (
-        "Omarchy",
-        f"vmlinuz-{kernel}",
-        f"initramfs-{kernel}.img",
-    ):
-        if token not in grub:
-            raise ContentEvidenceError(f"GRUB configuration is missing {token}")
     fstab = _target_file(target, paths["root_fstab"]).read_text(
         encoding="utf-8",
         errors="strict",
     )
-    boot_contract = _validate_grub_root_contract(
-        grub,
-        _installed_root_uuid(fstab),
-    )
-
     if limine:
-        boot_contract.update(backend="asahi-limine", uki=paths["esp_limine_uki"],
-                             kernel_cmdline=limine.kernel_cmdline(target))
+        # The configured GRUB file remains hashed transition evidence. Limine
+        # owns the finalized ESP; a retained GRUB file is not a fallback claim.
+        boot_contract = {
+            "backend": "asahi-limine",
+            "root_selector": "UUID=" + _installed_root_uuid(fstab),
+            "root_subvolume": "@",
+            "uki": paths["esp_limine_uki"],
+            "kernel_cmdline": limine.kernel_cmdline(target),
+            "retained_artifacts": {"boot_grub_config": "inactive-configured-bridge"},
+        }
+    else:
+        grub = _target_file(target, paths["boot_grub_config"]).read_text(
+            encoding="utf-8",
+            errors="strict",
+        )
+        for token in (
+            "Omarchy",
+            f"vmlinuz-{kernel}",
+            f"initramfs-{kernel}.img",
+        ):
+            if token not in grub:
+                raise ContentEvidenceError(f"GRUB configuration is missing {token}")
+        boot_contract = _validate_grub_root_contract(
+            grub,
+            _installed_root_uuid(fstab),
+        )
 
     legacy_probe = _target_file(
         target,
