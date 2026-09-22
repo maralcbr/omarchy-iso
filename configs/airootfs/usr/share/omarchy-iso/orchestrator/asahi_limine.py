@@ -21,10 +21,18 @@ DEFERRED_STEP = "install/hardware/apple/limine-boot.sh\n"
 # This is an image placeholder, never the builder host's identity. The first
 # boot creates its own machine-id and the runtime discards the placeholder menu.
 IMAGE_MACHINE_ID = "00000000000000000000000000000001"
+# Current systemd generates cryptsetup instance units at boot; no static
+# systemd-cryptsetup@.service template ships in the pinned systemd package.
+# Require the generator, its actual executable target and activation target.
+INITRD_EXECUTABLES = (
+    "usr/lib/systemd/system-generators/systemd-cryptsetup-generator",
+    "usr/bin/systemd-cryptsetup",
+)
 INITRD_FILES = (
+    *INITRD_EXECUTABLES,
     "usr/lib/omarchy/initcpio/omarchy-mac-encrypt",
     "usr/lib/systemd/system/omarchy-mac-encrypt.service",
-    "usr/lib/systemd/system/systemd-cryptsetup@.service",
+    "usr/lib/systemd/system/cryptsetup.target",
     r"usr/lib/systemd/system/run-systemd-cryptsetup-keydev\x2droot.mount.d/omarchy-mac-encrypt.conf",
     "usr/lib/omarchy/initcpio/omarchy-vendorfw-initrd.sh",
     "usr/lib/systemd/system/omarchy-vendorfw-initrd.service",
@@ -202,6 +210,9 @@ def validate_initramfs(root: Path, path: str) -> None:
             raise RuntimeError(f"final initramfs lacks {required}")
     verbose = subprocess.check_output(
         ["arch-chroot", str(root), "env", "LC_ALL=C", "lsinitcpio", "--nocolor", "--verbose", path], text=True)
+    for name in INITRD_EXECUTABLES:
+        if not re.search(r"^-..x[^\n]*\s(?:\./)?" + re.escape(name) + r"$", verbose, re.M):
+            raise RuntimeError(f"final initramfs cryptsetup binary is not executable: {name}")
     for name, target in INITRD_LINKS.items():
         if not re.search(r"^l[^\n]*\s(?:\./)?" + re.escape(name) + r" -> " + re.escape(target) + r"$", verbose, re.M):
             raise RuntimeError(f"final initramfs activation link is invalid: {name}")

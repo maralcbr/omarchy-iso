@@ -218,7 +218,9 @@ class AppleLimine(unittest.TestCase):
             if "pacman" in argv:
                 return "limine\n" if argv[-1].startswith("/usr/share/limine/") else "omarchy-mac-boot\n"
             if "--verbose" in argv:
-                return "\n".join(f"lrwxrwxrwx 1 root root 31 Jan 1 2026 {name} -> {target}" for name, target in boot.INITRD_LINKS.items())
+                return "\n".join(
+                    [f"lrwxrwxrwx 1 root root 31 Jan 1 2026 {name} -> {target}" for name, target in boot.INITRD_LINKS.items()]
+                    + [f"-rwxr-xr-x 1 root root 1 Jan 1 2026 {name}" for name in boot.INITRD_EXECUTABLES])
             members = [*boot.INITRD_FILES, *boot.INITRD_LINKS]
             return "\n".join(members[1:] if missing_hook else members)
         with contextlib.ExitStack() as stack:
@@ -256,6 +258,8 @@ class AppleLimine(unittest.TestCase):
             p = tree / name
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text("fixture unit or binary\n")
+            if name in boot.INITRD_EXECUTABLES:
+                p.chmod(0o755)
         for name, target in boot.INITRD_LINKS.items():
             p = tree / name
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -270,6 +274,21 @@ class AppleLimine(unittest.TestCase):
             subprocess.run(["bsdtar", "--format=newc", "-cf", str(archive), "-C", str(tree), "usr"], check=True)
             with mock.patch.object(boot.subprocess, "check_output", side_effect=output):
                 boot.validate_initramfs(self.root, str(archive))
+        # The pinned systemd generates cryptsetup instance units; a static
+        # template is absent, while its generator and executable must work.
+        self.assertFalse((tree / "usr/lib/systemd/system/systemd-cryptsetup@.service").exists())
+        check()
+        for name in boot.INITRD_EXECUTABLES:
+            binary = tree / name
+            contents = binary.read_bytes()
+            binary.unlink()
+            with self.assertRaisesRegex(RuntimeError, "initramfs lacks"):
+                check()
+            binary.write_bytes(contents)
+            binary.chmod(0o644)
+            with self.assertRaisesRegex(RuntimeError, "cryptsetup binary is not executable"):
+                check()
+            binary.chmod(0o755)
         check()
         link = tree / next(iter(boot.INITRD_LINKS))
         link.unlink()
