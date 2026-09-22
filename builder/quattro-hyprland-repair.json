@@ -1,0 +1,10 @@
+{
+  "name": "hyprland",
+  "version": "0.56.2-3",
+  "filename": "hyprland-0.56.2-3-aarch64.pkg.tar.xz",
+  "sha256": "dba57b0cba04557b7fa3478253c93fe4c8e88737f8dd570c0820177f567e5a95",
+  "signature_base64": "iQIzBAABCgAdFiEEaLNTfzmjE7PldNBndxk/FSvb5qYFAmqpHuIACgkQdxk/FSvb5qZRMxAAjUllWdX/iE4lRKyRMagY0d+2bkEI5pnrwXvW9npyHU59wn59imTJDPhdVLYx8J0ncLQ7SOriDDJo6WgVTfSV6I4zVbpDdcgTiETtwPmedeEsoUBQF2Ea8aPPsBalvrKBc1cul7VM0r7+YkSYpqYQHam4upoS+TCFokBfdMTuvYFUw6qlNEY/mi/W41dfiygYF6hSoqnGXiMw7NPXpP8+qQmVqLGkvyAjV59OoJ3HCWVxcR2XtMzxsUovdu8Nz+GSUjBmOK2NyGJPkvjVTh3DSbQBFB52SLO3thAmHaGtOdd3A5kS8CGZ0p5dmaaIP7Y9n3UggrDPCuANPWM0FeP+razNVuaoji5gnd5hWFG7wDMBJ4gkos5zwQCmetxGHPT9GEFQtAXWL6FlaSWA222aubuxA5YFeqoZQzNsWrIVlMj6YMP+Hef5b9hkjzDfSNAmOn4EaP1fHp47g8oGxd52GEtwPKw6ZyHlWLAGly8VSWp57ey8pmt/LEPw0F2OFHYHj5Hrjj17ibr9/svR87+i2hAQfH82RGalmJqPrOrGaJbov9YTHGB90aBFKnkKqTbaVrFJHyfieYSyZRqNpwRmup6rlbPhyTIpblNd6Yh/ZyXtYY9cGrb761GF+AImD6Bg2bk76qVhxEciI/FKhYgYIuXMtuNIg8RslhNsjdj1Ors=",
+  "signer": "68B3537F39A313B3E574D06777193F152BDBE6A6",
+  "base_url": "https://ca.us.mirror.archlinuxarm.org/aarch64/extra",
+  "required_dependency": "libaquamarine.so=14-64"
+}

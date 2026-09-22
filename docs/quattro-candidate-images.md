@@ -107,3 +107,9 @@ The short transaction installs the complete filtered base list and editor packag
 Finalization records both candidate and dependency manifests, removes inherited runtime-release claims, and selects the existing `omarchy-aarch64` feed plus Asahi and ALARM for the trial system. That custom feed remains `Optional TrustAll` because live edge is still unsigned; build-input signatures are mandatory and separate. This does not convert live edge or bootstrap trust on any existing installation. The dependency-snapshot path does not install Marcelo's custom repository or its signing key.
 
 Portable suite: 69 test files passed after the initial integration and again with the nine-package importer and full-base transaction checks. Full image creation and physical installation remain pending the complete signed candidate transaction.
+
+## Pinned ALARM Hyprland repair
+
+The September 10 ALARM snapshot has `hyprland 0.56.1-3` requiring `libaquamarine.so=13-64`, but its Aquamarine provides ABI 14. The explicit candidate-dependency path overlays the official ALARM `hyprland 0.56.2-3` rebuild, which requires ABI 14. `builder/quattro-hyprland-repair.json` records the exact archive, SHA256, embedded detached signature, expected ALARM signer, version and dependency. The fetcher verifies all of these before adding the package to the private build repository. Both files participate in the package-cache source identity. The normal repository path and live edge remain unchanged.
+
+The official archive was verified locally against the ALARM keyring and pinned signer. Package PR #61 has merged; signed nine-package run `35669668819` is the candidate used for the repaired full-base transaction.

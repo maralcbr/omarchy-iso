@@ -123,7 +123,8 @@
         "builder/quattro-candidate.py",
         "builder/quattro-candidate-packages.sh",
         "builder/quattro-dependencies.py",
-        "builder/quattro-dependencies.sh"
+        "builder/quattro-dependencies.sh",
+        "builder/fetch-quattro-hyprland.sh"
       ],
       "control_entrypoints": [
         "bin/omarchy-iso-make",
@@ -162,7 +163,9 @@
         "builder/quattro-trust/public.gpg",
         "builder/quattro-trust/policy.json",
         "builder/quattro-dependencies.py",
-        "builder/quattro-dependencies.sh"
+        "builder/quattro-dependencies.sh",
+        "builder/fetch-quattro-hyprland.sh",
+        "builder/quattro-hyprland-repair.json"
       ],
       "admission_paths": [
         "bin/omarchy-iso-make",

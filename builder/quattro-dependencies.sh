@@ -32,6 +32,8 @@ PYVERIFY
   for filename in "${apple_keyring_names[@]}" "${apple_package_names[@]}"; do
     archives+=("$offline_mirror_dir/$filename")
   done
+  bash /builder/fetch-quattro-hyprland.sh "$offline_mirror_dir"
+  archives+=("$offline_mirror_dir/$(jq -er '.filename' /builder/quattro-hyprland-repair.json)")
   # repo-add updates existing databases: remove inherited entries first.
   rm -f "$offline_mirror_dir"/arm-snapshots.{db,files}* "$offline_mirror_dir"/ARM-{REPOSITORY,RUNTIME,RUNTIME-CHANNEL,PACKAGES}
   repo-add "$offline_mirror_dir/arm-snapshots.db.tar.gz" "${archives[@]}"
@@ -39,6 +41,7 @@ PYVERIFY
   pacman-key --populate omarchy
   local evidence=/out/build-evidence/$OMARCHY_BUILD_RUN_ID
   mkdir -p "$evidence"
+  cp /builder/quattro-hyprland-repair.json "$evidence/verified-package-cache.hyprland-repair.json"
   for filename in manifest.json manifest.json.sig origin.db origin.db.sig; do
     cp "$verified/$filename" "$evidence/verified-package-cache.dependencies-$filename"
   done

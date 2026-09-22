@@ -65,3 +65,4 @@ test/unit/test_quattro_dependencies.py
 test/unit/asahi-native-esp-marker-test.sh
 test/unit/quattro-candidate-packages-test.sh
 test/unit/quattro-package-install-check-test.sh
+test/unit/test_quattro_hyprland.py
