@@ -1,0 +1,42 @@
+{
+  "recorded_date": "2026-09-22",
+  "purpose": "Local evidence integrity index; no credentials or host records copied",
+  "files": [
+    {
+      "path": "linux-first-boot-validation.md",
+      "sha256": "4145569c7fb1e467721e333a426d3d185e9a03403b5b9252ca8e216c378b0346"
+    },
+    {
+      "path": "plan.json",
+      "sha256": "b49a65ad61b819b232368f42e3b65a1db75669dfbd9cbf8a755dd1b12ebe638a"
+    },
+    {
+      "path": "microphone-routing-comparison.json",
+      "sha256": "b68a363f903c7e280b0b168081a3b69069d0fcc79c7d385268c43147b5dc9ac0"
+    },
+    {
+      "path": "post-suspend-validation.json",
+      "sha256": "3b807e3d717b1b20d63a83422351ebc88a484a0ce28540416d24e8b7ec30f7a7"
+    },
+    {
+      "path": "post-reboot-validation.json",
+      "sha256": "134c38ec5f718e4d3e1a70844144ac4fff605117446ff420b92c5778cd7a7780"
+    },
+    {
+      "path": "aurora-trial-3caea469/trial-status.json",
+      "sha256": "5581974a4e7320c43ed7efa27c0aaf5ffef418d10a43c2ee400dcfc20d4f95b9"
+    },
+    {
+      "path": "aurora-trial-3caea469/boot-check.json",
+      "sha256": "f505a5518c4850fde853b852ff847d69e650e7ea5b5723336916354ff8a2f7db"
+    },
+    {
+      "path": "aurora-trial-3caea469/first-aurora-boot.json",
+      "sha256": "bb7cc44d11798f89b690778d6a46f82cbcb297a16eb30795ee4ff3a777f95ca0"
+    },
+    {
+      "path": "aurora-trial-3caea469/clean-reboot.json",
+      "sha256": "5cd61bbaa5f5fbdada2ff75aef8ddf6568807455b8b8f7b63448bb0a19e2a0cd"
+    }
+  ]
+}

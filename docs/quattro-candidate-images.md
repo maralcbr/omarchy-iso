@@ -1,5 +1,7 @@
 # Signed quattro candidate image inputs
 
+Latest physical evidence: [M3 Air private installation checkpoint, September 22, 2026](m3-validation-2026-09-22.md). The exact private candidate completed installation, Recovery handoff and plain Linux validation; earlier pending statements below describe historical build stages. Encryption and Limine remain unqualified on this M3.
+
 This diagnostic path consumes the three signed packages produced by `omarchy-mac/omarchy-pkgs-aarch64`: `omarchy`, `omarchy-settings`, and `omarchy-mac`. It does not publish packages, update edge, alter the installed desktop, or install onto physical disks. The existing Asahi product and kernel remain selected. Aurora and release qualification are excluded from this first integration.
 
 ## Recorded input and trust
