@@ -54,14 +54,18 @@ class AppleLimine(unittest.TestCase):
         self.addCleanup(self.environment.stop)
         self.uuid = "12345678-1234-1234-1234-123456789abc"
         self.cmdline = f"root=UUID={self.uuid} rw rootflags=subvol=@,x-systemd.device-timeout=0 rootfstype=btrfs"
+        self.kver = "7.1.6-asahi"
         self.sections = {".linux": b"fixture Apple kernel", ".initrd": b"fixture final initramfs",
-                         ".osrel": b"ID=archarm\n", ".cmdline": self.cmdline.encode() + b"\0"}
+                         ".osrel": f"VERSION_ID={self.kver}\nID=archarm\n".encode(),
+                         ".uname": self.kver.encode(), ".cmdline": self.cmdline.encode() + b" \n\0"}
         self.write("usr/share/limine/BOOTAA64.EFI", pe({".text": b"fixture loader"}))
         self.write("boot/efi/EFI/BOOT/BOOTAA64.EFI", pe({".text": b"fixture loader"}))
         self.write("boot/efi/EFI/Linux/omarchy_linux-asahi.efi", pe(self.sections))
         self.write("boot/vmlinuz-linux-asahi", self.sections[".linux"])
         self.write("boot/initramfs-linux-asahi.img", self.sections[".initrd"])
-        self.write("etc/os-release", self.sections[".osrel"])
+        self.write("etc/os-release", b"ID=archarm\n")
+        self.write(f"usr/lib/modules/{self.kver}/pkgbase", "linux-asahi\n")
+        self.write(f"usr/lib/modules/{self.kver}/vmlinuz", self.sections[".linux"])
         self.write("etc/fstab", f"UUID={self.uuid} / btrfs subvol=@ 0 0\n")
         self.write("etc/default/limine", f'KERNEL_CMDLINE[default]="{self.cmdline}"\n')
         self.write("boot/efi/m1n1/boot.bin", b"fixture m1n1")
@@ -81,10 +85,39 @@ class AppleLimine(unittest.TestCase):
         self.check()
 
     def test_uki_cannot_retain_old_kernel_or_initramfs(self):
-        for section in (".linux", ".initrd", ".osrel", ".cmdline"):
+        for section in (".linux", ".initrd", ".osrel", ".cmdline", ".uname"):
             with self.subTest(section=section):
                 self.write("boot/efi/EFI/Linux/omarchy_linux-asahi.efi", pe({**self.sections, section: b"stale"}))
                 with self.assertRaisesRegex(RuntimeError, "UKI"):
+                    self.check()
+
+    def test_osrel_replaces_only_distro_version_id_with_selected_kernel(self):
+        self.write("etc/os-release", b"VERSION_ID=rolling\nID=archarm\n")
+        self.check()
+        self.write("etc/os-release", b"VERSION_ID=rolling\nID=other\n")
+        with self.assertRaisesRegex(RuntimeError, "os-release"):
+            self.check()
+
+    def test_release_requires_unique_installed_kernel_with_matching_bytes(self):
+        self.write(f"usr/lib/modules/{self.kver}/vmlinuz", b"different module kernel")
+        with self.assertRaisesRegex(RuntimeError, "installed kernel"):
+            self.check()
+        self.write(f"usr/lib/modules/{self.kver}/vmlinuz", self.sections[".linux"])
+        self.write("usr/lib/modules/another/pkgbase", "linux-asahi\n")
+        with self.assertRaisesRegex(RuntimeError, "one installed kernel"):
+            self.check()
+        (self.root / "usr/lib/modules/another/pkgbase").unlink()
+        (self.root / f"usr/lib/modules/{self.kver}/pkgbase").unlink()
+        with self.assertRaisesRegex(RuntimeError, "one installed kernel"):
+            self.check()
+
+    def test_cmdline_accepts_only_exact_native_writer_delimiters(self):
+        for cmdline in (self.cmdline.encode() + b"\0", self.cmdline.encode() + b"  \n\0",
+                        self.cmdline.replace(" rw ", " ro ").encode() + b" \n\0",
+                        self.cmdline.encode() + b"\0ignored \n\0"):
+            with self.subTest(cmdline=cmdline):
+                self.write("boot/efi/EFI/Linux/omarchy_linux-asahi.efi", pe({**self.sections, ".cmdline": cmdline}))
+                with self.assertRaisesRegex(RuntimeError, "command line"):
                     self.check()
 
     def test_same_size_grub_or_wrong_architecture_loader_rejected(self):

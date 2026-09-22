@@ -96,7 +96,7 @@ def pe_sections(path: Path) -> dict[str, bytes]:
         # BSS has no file bytes. Required UKI sections below must be populated.
         if raw_size and raw_offset < table + count * 40:
             raise RuntimeError(f"truncated PE section: {path}: {name}")
-        if name in (".linux", ".initrd", ".osrel", ".cmdline") and size > raw_size:
+        if name in (".linux", ".initrd", ".osrel", ".cmdline", ".uname") and size > raw_size:
             raise RuntimeError(f"truncated UKI section: {path}: {name}")
         sections[name] = data[raw_offset:raw_offset + min(size, raw_size)] if raw_size else b""
     return sections
@@ -140,6 +140,14 @@ def validate_artifacts(root: Path, kernel: str) -> None:
                           (".initrd", root / f"boot/initramfs-{kernel}.img")):
         if sections.get(section) != regular(path):
             raise RuntimeError(f"UKI {section} differs from finalized {path.name}")
+    modules = [path.parent for path in (root / "usr/lib/modules").glob("*/pkgbase")
+               if regular(path).decode().strip() == kernel]
+    if len(modules) != 1 or not re.fullmatch(r"[A-Za-z0-9._+-]+", modules[0].name):
+        raise RuntimeError("UKI requires one installed kernel release")
+    release = modules[0].name.encode()
+    if (sections.get(".uname") != release
+            or regular(modules[0] / "vmlinuz") != sections[".linux"]):
+        raise RuntimeError("UKI release differs from the installed kernel")
     # os-release may be the distro's intentional symlink into /usr/lib.
     os_release = root / "etc/os-release"
     if os_release.is_symlink():
@@ -147,10 +155,17 @@ def validate_artifacts(root: Path, kernel: str) -> None:
         os_release = root / link.lstrip("/") if link.startswith("/") else os_release.parent / link
         if root.resolve() not in os_release.resolve().parents:
             raise RuntimeError("os-release escapes the image")
-    if sections.get(".osrel", b"").rstrip(b"\0") != regular(os_release).rstrip(b"\0"):
+    # The pinned mkinitcpio default-preset writer prepends the selected kernel
+    # release and removes the distro VERSION_ID. Retain every other byte.
+    expected_release = b"VERSION_ID=" + release + b"\n" + b"".join(
+        line for line in regular(os_release).splitlines(keepends=True)
+        if not line.startswith(b"VERSION_ID="))
+    if sections.get(".osrel") != expected_release:
         raise RuntimeError("UKI os-release differs from installed release")
     expected_cmdline = kernel_cmdline(root)
-    if sections.get(".cmdline", b"").rstrip(b"\0").decode() != expected_cmdline:
+    # mkinitcpio translates the single input line's newline to a space, then
+    # appends its own newline and NUL. Do not discard arbitrary whitespace.
+    if sections.get(".cmdline") != expected_cmdline.encode() + b" \n\0":
         raise RuntimeError("UKI command line differs from finalized defaults")
     menu = regular(esp / "limine.conf").decode()
     entry = re.search(r"^\s*//" + re.escape(kernel) + r"\s*\n((?:(?!\s*/).*(?:\n|$))*)", menu, re.M)
