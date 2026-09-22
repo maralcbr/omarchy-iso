@@ -183,11 +183,29 @@ jq() { printf '4\n'; }
 pacman-key() { echo TRUST-CHANGED; return 99; }
 export OMARCHY_CANDIDATE_ROOT=fixture OMARCHY_CANDIDATE_RECEIPT_SHA256=fixture OMARCHY_CANDIDATE_SOURCE=fixture
 export OMARCHY_BUILD_MODE=diagnostic OMARCHY_MEDIA_TARGET=aarch64/apple-silicon OMARCHY_ARTIFACT_KIND=asahi-os-package
-prepare_quattro_candidate_packages
+preflight_quattro_candidate_packages
 ''', 'fixture', str(script)], text=True, capture_output=True)
         self.assertEqual(result.returncode, 1)
         self.assertIn('image assembly is not enabled', result.stderr)
         self.assertNotIn('TRUST-CHANGED', result.stdout)
+
+    def test_full_cache_initializer_refuses_before_all_trust_and_downloads(self):
+        stage = (ROOT / 'builder/asahi-stages/verified-package-cache.sh').read_text()
+        stage = stage.replace('source /builder/', 'source "' + str(ROOT / 'builder') + '/')
+        stage = '\n'.join(line + '"' if 'source "' in line else line for line in stage.splitlines())
+        result = subprocess.run(['bash', '-c', stage + r"""
+python3() { return 0; }
+jq() { printf '4\n'; }
+pacman-key() { echo TRUST-CHANGED; return 99; }
+prepare_verified_package_snapshots_and_trust() { echo DEPENDENCIES-STARTED; return 99; }
+mkdir() { echo CACHE-TOUCHED; return 99; }
+export OMARCHY_CANDIDATE_ROOT=fixture OMARCHY_CANDIDATE_RECEIPT_SHA256=fixture OMARCHY_CANDIDATE_SOURCE=fixture
+export OMARCHY_BUILD_MODE=diagnostic OMARCHY_MEDIA_TARGET=aarch64/apple-silicon OMARCHY_ARTIFACT_KIND=asahi-os-package
+initialize_verified_package_cache_stage
+"""], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn('image assembly is not enabled', result.stderr)
+        self.assertEqual(result.stdout, '')
 
     def test_missing_boot_package(self):
         data = json.loads((self.input / 'manifest.json').read_text())

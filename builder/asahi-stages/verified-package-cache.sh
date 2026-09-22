@@ -43,6 +43,10 @@ prepare_verified_package_runtime_manifest() {
 # module owns the tool environment, trust roots, and immutable snapshots used
 # to select and verify package payloads.
 initialize_verified_package_cache_stage() {
+  # Authentication and the schema-4 activation gate precede all pacman trust,
+  # network downloads and dependency preparation, including cached toolchains.
+  source /builder/quattro-candidate-packages.sh
+  preflight_quattro_candidate_packages || return 1
   build_cache_dir=/var/cache
   offline_mirror_dir="$build_cache_dir/airootfs/var/cache/omarchy/mirror/offline"
   asahi_build_lock=/builder/asahi-build-lock.json
@@ -117,7 +121,6 @@ initialize_verified_package_cache_stage() {
   fi
 
   prepare_verified_package_snapshots_and_trust
-  source /builder/quattro-candidate-packages.sh
   prepare_quattro_candidate_packages
 }
 

@@ -2,7 +2,7 @@
 
 # Only used in the disposable Apple image builder. No installed keyring or
 # online repository configuration is changed by this adapter.
-prepare_quattro_candidate_packages() {
+preflight_quattro_candidate_packages() {
   [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]] || return 0
   [[ $OMARCHY_BUILD_MODE == "diagnostic" &&
     $OMARCHY_MEDIA_TARGET == "aarch64/apple-silicon" &&
@@ -11,11 +11,21 @@ prepare_quattro_candidate_packages() {
   python3 /builder/quattro-candidate.py \
     --input "$OMARCHY_CANDIDATE_ROOT" --output "$verified" \
     --receipt-sha256 "$OMARCHY_CANDIDATE_RECEIPT_SHA256" \
-    --source-revision "$OMARCHY_CANDIDATE_SOURCE"
-  if [[ $(jq -er '.schema' "$verified/manifest.json") == 4 ]]; then
+    --source-revision "$OMARCHY_CANDIDATE_SOURCE" || return 1
+  OMARCHY_CANDIDATE_SCHEMA=$(jq -er '.schema' "$verified/manifest.json") || return 1
+  if [[ $OMARCHY_CANDIDATE_SCHEMA == 4 ]]; then
     echo "Schema-4 Limine inputs verified, but image assembly is not enabled: the dependency snapshot and finalized boot contract still require integration." >&2
     return 1
   fi
+}
+
+prepare_quattro_candidate_packages() {
+  [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]] || return 0
+  local verified=/tmp/omarchy-quattro-verified
+  # initialize_verified_package_cache_stage authenticated these inputs before
+  # any builder trust or dependency preparation. Never accept an unverified root.
+  [[ -f $verified/manifest.json ]] || return 1
+  [[ $(jq -er '.schema' "$verified/manifest.json") != 4 ]] || return 1
   local primary filename
   primary=$(jq -er '.primary_fingerprint' /builder/quattro-trust/policy.json)
   pacman-key --add /builder/quattro-trust/public.gpg
@@ -47,6 +57,11 @@ prepare_quattro_candidate_packages() {
 verify_quattro_candidate_selection() {
   [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]] || return 0
   local filename
+  if [[ ${OMARCHY_CANDIDATE_SCHEMA:-3} == 4 ]] &&
+    grep -Eq '^omarchy-(apple-boot|first-boot)-' "$requested_package_files"; then
+    echo "Legacy boot package selected alongside Limine candidate" >&2
+    return 1
+  fi
   for filename in "${candidate_package_files[@]}"; do
     grep -Fxq "$filename" "$requested_package_files" || {
       echo "Candidate package was not selected: $filename" >&2
