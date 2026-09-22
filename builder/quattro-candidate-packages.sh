@@ -14,7 +14,7 @@ preflight_quattro_candidate_packages() {
     --source-revision "$OMARCHY_CANDIDATE_SOURCE" || return 1
   OMARCHY_CANDIDATE_SCHEMA=$(jq -er '.schema' "$verified/manifest.json") || return 1
   if [[ $OMARCHY_CANDIDATE_SCHEMA == 4 ]]; then
-    echo "Schema-4 Limine inputs verified, but image assembly is not enabled: the dependency snapshot and finalized boot contract still require integration." >&2
+    echo "Schema-4 Limine inputs verified, but image assembly is not enabled: the coordinated signed package set, new U-Boot branding and complete image/boot qualification are still required." >&2
     return 1
   fi
 }

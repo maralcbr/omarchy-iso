@@ -105,3 +105,48 @@ if run_verifier >"$work/out" 2>"$work/error"; then
 fi
 grep -Fq 'owner provisioning is still pending' "$work/error"
 echo "ok - installed verifier rejects incomplete first-owner provisioning"
+
+# The opt-in profile verifies real runtime state and permits only a crypt
+# mapper directly backed by an internal NVMe partition.
+rm "$fixture/var/lib/omarchy/provisioning/pending"
+printf '%s\n' '{"schema":1,"boot_profile":"limine","candidate_schema":4}' >"$fixture/usr/share/omarchy/apple-boot-profile.json"
+mkdir -p "$fixture/boot/efi/EFI/Linux" "$fixture/etc/default"
+printf 'Omarchy Limine' >"$fixture/boot/efi/limine.conf"
+printf 'uki' >"$fixture/boot/efi/EFI/Linux/omarchy_linux-asahi.efi"
+touch "$fixture/var/lib/omarchy/limine.enabled" "$fixture/etc/default/limine"
+cat >"$stubs/omarchy-mac-kernel" <<'STUB'
+#!/bin/bash
+printf 'linux-asahi\n'
+STUB
+cat >"$stubs/omarchy-apple-silicon-boot-check" <<'STUB'
+#!/bin/bash
+[[ $OMARCHY_BOOT_CHECK_ROOT == "$TEST_ROOT" && $1 == linux-asahi ]]
+[[ ! -e $TEST_ROOT/reject-boot ]]
+STUB
+sed -i 's|/dev/nvme0n1p7 btrfs|/dev/mapper/cryptroot[/@] btrfs|' "$stubs/findmnt"
+python3 - "$stubs/lsblk" <<'PYEDIT'
+import sys
+from pathlib import Path
+p=Path(sys.argv[1]);s=p.read_text().replace('#!/bin/bash\n', """#!/bin/bash
+if [[ $1 == -dnro ]]; then
+  case $2 in
+    TYPE) printf 'crypt\\n' ;;
+    PKNAME) cat "$TEST_ROOT/mapper-parent" ;;
+    *) exit 1 ;;
+  esac
+  exit 0
+fi
+""",1);p.write_text(s)
+PYEDIT
+chmod +x "$stubs/omarchy-mac-kernel" "$stubs/omarchy-apple-silicon-boot-check"
+printf 'nvme0n1p7\n' >"$fixture/mapper-parent"
+run_verifier >"$work/limine.json"
+jq -e '.boot_profile == "limine" and .filesystems.root.source == "/dev/mapper/cryptroot[/@]"' "$work/limine.json" >/dev/null
+touch "$fixture/reject-boot"
+if run_verifier >"$work/out" 2>"$work/error"; then exit 1; fi
+grep -Fq 'installed Limine boot contract failed' "$work/error"
+rm "$fixture/reject-boot"
+printf 'sda3\n' >"$fixture/mapper-parent"
+if run_verifier >"$work/out" 2>"$work/error"; then exit 1; fi
+grep -Fq 'encrypted root is not directly backed by internal NVMe' "$work/error"
+echo "ok - Limine verifier checks the runtime contract and internal encrypted root"

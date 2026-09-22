@@ -41,6 +41,12 @@ from .ui import info
 
 
 def finalize_boot(ctx: InstallContext) -> None:
+    from . import asahi_limine
+
+    if asahi_limine.selected(ctx):
+        asahi_limine.finalize(ctx)
+        return
+
     if _boot_backend(ctx) == "asahi-grub":
         from .asahi_boot import finalize_asahi_grub_boot
 
@@ -431,6 +437,14 @@ WantedBy=multi-user.target
 
 def install_vendor_firmware(ctx: InstallContext) -> None:
     """Persist the machine's vendor firmware into the installed system."""
+    from . import asahi_limine
+
+    if asahi_limine.selected(ctx):
+        # The new boot package owns the firmware implementation and ordering.
+        asahi_limine.regular(ctx.target / "etc/systemd/system/omarchy-vendor-firmware.service")
+        subprocess.run(["arch-chroot", str(ctx.target), "systemctl", "enable",
+                        "omarchy-vendor-firmware.service"], check=True)
+        return
     info("\u203a installing vendor firmware service")
     unit = ctx.target / "etc" / "systemd" / "system" / "omarchy-vendor-firmware.service"
     unit.parent.mkdir(parents=True, exist_ok=True)
@@ -799,6 +813,15 @@ def _tailscale_authkey(path: Path) -> str:
 def validate_boot(ctx: InstallContext) -> None:
     _assert_boot_hooks_restored(ctx)
 
+    from . import asahi_limine
+
+    if asahi_limine.selected(ctx):
+        asahi_limine.validate(ctx)
+        if ctx.is_protected:
+            _validate_pre_mounted_filesystems(ctx)
+        _validate_provisioning_state(ctx)
+        return
+
     if _boot_backend(ctx) == "asahi-grub":
         _validate_asahi_grub_boot(ctx)
         if ctx.is_protected:
@@ -1026,13 +1049,20 @@ def _validate_pre_mounted_filesystems(ctx: InstallContext) -> None:
 
 
 def create_factory_snapshot(ctx: InstallContext) -> None:
+    from . import asahi_limine
+
+    limine_image = asahi_limine.selected(ctx)
     fstype = _findmnt_value(ctx.target, "FSTYPE")
     if fstype != "btrfs":
+        if limine_image:
+            raise RuntimeError("Apple Limine image requires a btrfs factory snapshot")
         info(f"› target root is {fstype or 'unknown'}, not btrfs; skipping factory snapshot")
         return
 
     options = (_findmnt_value(ctx.target, "OPTIONS") or "").split(",")
     if not any(opt in ("subvol=/@", "subvol=@") for opt in options):
+        if limine_image:
+            raise RuntimeError("Apple Limine factory source must be @")
         info("› target root is not the @ subvolume; skipping factory snapshot")
         return
 
@@ -1058,12 +1088,18 @@ def create_factory_snapshot(ctx: InstallContext) -> None:
                 check=True, capture_output=True,
             )
 
+        if limine_image:
+            # Scrub before snapshotting: root and sealed factory cannot share
+            # the disposable builder's identity or package-signing secrets.
+            asahi_limine.scrub_identity(ctx.target)
         info("› snapshotting @ as @factory (read-only)")
         subprocess.run(
             ["btrfs", "subvolume", "snapshot", str(root_subvol), str(factory)],
             check=True,
         )
         _scrub_factory_snapshot(factory)
+        if limine_image:
+            asahi_limine.scrub_factory(factory)
         subprocess.run(
             ["btrfs", "property", "set", "-ts", str(factory), "ro", "true"],
             check=True,

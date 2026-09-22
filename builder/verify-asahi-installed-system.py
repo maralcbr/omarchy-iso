@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import configparser
 import json
+import importlib.util
 import re
 import sys
 from pathlib import Path
@@ -314,6 +315,27 @@ def check_boot(
         )
 
 
+
+def check_limine(verification: Verification, root: Path, kernel: str) -> None:
+    source = Path(__file__).with_name("capture-asahi-os-package-contents.py")
+    spec = importlib.util.spec_from_file_location("image_contents", source)
+    contents = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(contents)
+    try:
+        contract = contents.limine_contract(root)
+        if contract is None:
+            return
+        contract.validate_artifacts(root, kernel)
+    except (OSError, ValueError, RuntimeError) as error:
+        verification.record("boot-limine-artifacts", False, str(error))
+        return
+    verification.record("boot-limine-artifacts", True, "packaged loader, final UKI sections, menu and root UUID agree")
+    installed = installed_package_names(root)
+    required = {"omarchy-mac-boot", "limine", "limine-mkinitcpio-hook", "limine-snapper-sync", "uboot-asahi"}
+    legacy = {"omarchy-apple-boot", "omarchy-first-boot"}
+    verification.record("boot-limine-packages", required <= installed and not legacy & installed,
+                        "Limine package closure must replace the legacy boot packages")
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root-tree", required=True, type=Path)
@@ -337,6 +359,7 @@ def main() -> int:
     check_enabled_units(verification, arguments.root_tree)
     check_packages(verification, arguments.root_tree, arguments.kernel, arguments.package_profile)
     check_identity(verification, arguments.root_tree)
+    check_limine(verification, arguments.root_tree, arguments.kernel)
     if arguments.boot_tree is not None:
         check_boot(
             verification, arguments.boot_tree, arguments.expected_root_uuid, arguments.kernel

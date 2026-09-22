@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -165,6 +166,19 @@ def _artifacts_for(kernel: str) -> dict:
     }
 
 
+def limine_contract(target: Path):
+    profile = target / "usr/share/omarchy/apple-boot-profile.json"
+    if not profile.exists() and not profile.is_symlink():
+        return None
+    source = Path(__file__).resolve().parents[1] / "configs/airootfs/usr/share/omarchy-iso/orchestrator/asahi_limine.py"
+    spec = importlib.util.spec_from_file_location("image_limine", source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if profile.is_symlink() or not profile.is_file() or json.loads(profile.read_text()) != module.PROFILE:
+        raise ContentEvidenceError("invalid installed Apple boot profile")
+    return module
+
+
 def capture(target: Path, node_identity: dict, kernel: str) -> dict:
     try:
         status = target.lstat()
@@ -180,6 +194,19 @@ def capture(target: Path, node_identity: dict, kernel: str) -> dict:
         raise ContentEvidenceError("temporary platform detector was not restored")
 
     paths = _artifacts_for(kernel)
+    limine = limine_contract(target)
+    if limine:
+        try:
+            limine.validate_artifacts(target, kernel)
+        except (OSError, ValueError, RuntimeError) as error:
+            raise ContentEvidenceError(str(error)) from error
+        paths.update({
+            "esp_limine_menu": "boot/efi/limine.conf",
+            "esp_limine_uki": f"boot/efi/EFI/Linux/omarchy_{kernel}.efi",
+            "root_limine_defaults": "etc/default/limine",
+            "root_boot_profile": "usr/share/omarchy/apple-boot-profile.json",
+            "root_limine_loader": "usr/share/limine/BOOTAA64.EFI",
+        })
     artifacts = {
         name: _artifact(target, relative)
         for name, relative in paths.items()
@@ -203,6 +230,10 @@ def capture(target: Path, node_identity: dict, kernel: str) -> dict:
         grub,
         _installed_root_uuid(fstab),
     )
+
+    if limine:
+        boot_contract.update(backend="asahi-limine", uki=paths["esp_limine_uki"],
+                             kernel_cmdline=limine.kernel_cmdline(target))
 
     legacy_probe = _target_file(
         target,

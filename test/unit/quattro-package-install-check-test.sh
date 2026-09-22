@@ -13,7 +13,7 @@ offline_mirror_dir=$work/mirror
 HOST_UID=$(id -u); HOST_GID=$(id -g)
 mkdir -p "$OMARCHY_CANDIDATE_ROOT" "$build_cache_dir"
 cat >"$OMARCHY_CANDIDATE_ROOT/manifest.json" <<'JSON'
-{"source_revision":"fixture", "packages":[{"name":"omarchy","version":"1-1"},{"name":"omarchy-settings","version":"1-1"},{"name":"omarchy-mac","version":"1-1"}]}
+{"schema":1,"source_revision":"fixture", "packages":[{"name":"omarchy","version":"1-1"},{"name":"omarchy-settings","version":"1-1"},{"name":"omarchy-mac","version":"1-1"}]}
 JSON
 mktemp() { mkdir -p "$work/root"; printf '%s\n' "$work/root"; }
 pacstrap() {
@@ -50,6 +50,7 @@ python3 - "$OMARCHY_CANDIDATE_ROOT/manifest.json" <<'PYTEST'
 import json, sys
 from pathlib import Path
 p=Path(sys.argv[1]); data=json.loads(p.read_text())
+data['schema']=2
 data['package_repository_revision']='recipe-fixture'
 data['packages'] += [{'name':name,'version':'1-1'} for name in ('avd-fw','libva-v4l2_request-avd')]
 p.write_text(json.dumps(data))
@@ -85,6 +86,7 @@ python3 - "$OMARCHY_CANDIDATE_ROOT/manifest.json" <<'PYTEST'
 import json, sys
 from pathlib import Path
 p=Path(sys.argv[1]); data=json.loads(p.read_text())
+data['schema']=3
 data['packages'] += [{'name':name,'version':'1-1'} for name in ('asdcontrol','tobi-try','qemu-user-static','qemu-user-static-binfmt')]
 p.write_text(json.dumps(data))
 PYTEST
@@ -107,3 +109,44 @@ pacman() {
 }
 failure=none; OMARCHY_BUILD_RUN_ID=nine-with-full-base
 run_quattro_package_install_check
+
+# Schema 4 selects every boot candidate and refuses either replaced legacy
+# boot package even if all candidate versions and source records match.
+python3 - "$OMARCHY_CANDIDATE_ROOT/manifest.json" <<'PYTEST'
+import json, sys
+from pathlib import Path
+p=Path(sys.argv[1]); data=json.loads(p.read_text())
+data['schema']=4
+data['packages'] += [{'name':name,'version':'1-1'} for name in
+    ('omarchy-mac-boot','uboot-asahi','limine-mkinitcpio-hook','limine-snapper-sync')]
+p.write_text(json.dumps(data))
+PYTEST
+full_candidates=(omarchy omarchy-settings omarchy-mac avd-fw libva-v4l2_request-avd
+  asdcontrol tobi-try qemu-user-static qemu-user-static-binfmt
+  omarchy-mac-boot uboot-asahi limine-mkinitcpio-hook limine-snapper-sync)
+pacstrap() {
+  [[ ${*:6} == "base ${full_candidates[*]} base neovim dotnet-runtime-bin omarchy-nvim" ]]
+  desktop_pacstrap "${@:1:9}"
+  for name in "${full_candidates[@]:3}"; do
+    mkdir -p "$5/usr/share/doc/$name"
+    printf 'recipe-fixture\n' >"$5/usr/share/doc/$name/source-revision"
+  done
+}
+pacman() {
+  for name in "${full_candidates[@]}"; do
+    printf '%s 1-1\n' "$name"
+  done
+  case "$failure" in
+    omarchy-apple-boot|omarchy-first-boot) printf '%s 1-1\n' "$failure" ;;
+  esac
+}
+failure=none; OMARCHY_BUILD_RUN_ID=thirteen-with-full-base
+run_quattro_package_install_check
+grep -q '"result": "passed"' "$work/evidence/$OMARCHY_BUILD_RUN_ID/package-install-check/result.json"
+for failure in omarchy-apple-boot omarchy-first-boot; do
+  OMARCHY_BUILD_RUN_ID="thirteen-with-$failure"
+  if run_quattro_package_install_check >"$work/out" 2>"$work/error"; then exit 1; fi
+  grep -Fq 'Legacy boot package installed alongside Limine candidate' "$work/error"
+  [[ ! -e $work/evidence/$OMARCHY_BUILD_RUN_ID/package-install-check/result.json ]]
+done
+printf 'PASS: all thirteen candidates are selected and legacy boot packages are rejected\n'

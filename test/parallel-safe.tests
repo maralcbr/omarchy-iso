@@ -67,3 +67,6 @@ test/unit/quattro-candidate-packages-test.sh
 test/unit/quattro-package-install-check-test.sh
 test/unit/test_quattro_hyprland.py
 test/unit/test_quattro_checkpoint_locks.py
+test/unit/quattro-finalized-profile-test.sh
+test/unit/test_asahi_limine.py
+test/unit/test_asahi_limine_contents.py

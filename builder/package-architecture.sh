@@ -147,13 +147,13 @@ filter_target_packages() {
           continue
           ;;
         limine-mkinitcpio-hook|limine-snapper-sync)
-          [[ ${OMARCHY_CANDIDATE_SCHEMA:-3} == 4 ]] || continue
+          [[ -n ${OMARCHY_CANDIDATE_ROOT:-} && ${OMARCHY_CANDIDATE_SCHEMA:-3} == 4 ]] || continue
           ;;
         snapper)
           [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]] || continue
           ;;
         limine)
-          [[ ${OMARCHY_CANDIDATE_SCHEMA:-3} == 4 ]] || line=grub
+          [[ -n ${OMARCHY_CANDIDATE_ROOT:-} && ${OMARCHY_CANDIDATE_SCHEMA:-3} == 4 ]] || line=grub
           ;;
         linux|linux-asahi|linux-aurora)
           line=${ASAHI_KERNEL_PACKAGE:-linux-asahi}

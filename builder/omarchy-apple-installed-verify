@@ -30,6 +30,15 @@ grep -Fxq 'product_id=omarchy-mx-mac' "$marker" || fail "full-OS product changed
 grep -Fxq 'mode=installed-full-os' "$marker" || fail "full-OS mode changed"
 [[ ! -e $pending && ! -L $pending ]] || fail "owner provisioning is still pending"
 
+boot_profile=grub
+profile="$root/usr/share/omarchy/apple-boot-profile.json"
+if [[ -e $profile || -L $profile ]]; then
+  [[ -f $profile && ! -L $profile ]] || fail "Apple boot profile is unsafe"
+  jq -e '. == {schema: 1, boot_profile: "limine", candidate_schema: 4}' "$profile" >/dev/null ||
+    fail "Apple boot profile is invalid"
+  boot_profile=limine
+fi
+
 architecture=$(uname -m)
 kernel_release=$(uname -r)
 [[ $architecture == aarch64 ]] || fail "running architecture is not aarch64"
@@ -51,7 +60,15 @@ mount_record() {
   read -r source filesystem < <(
     findmnt -rn -o SOURCE,FSTYPE --target "$target"
   ) || fail "$role filesystem is unavailable"
-  [[ $source == /dev/nvme* ]] || fail "$role is not on internal NVMe"
+  if [[ $role == root && $boot_profile == limine && $source == /dev/mapper/* ]]; then
+    local device=${source%%[*} parent type
+    type=$(lsblk -dnro TYPE "$device") || fail "root mapper type is unavailable"
+    parent=$(lsblk -dnro PKNAME "$device") || fail "root mapper parent is unavailable"
+    [[ $type == crypt && $parent =~ ^nvme[0-9]+n[0-9]+p[0-9]+$ ]] ||
+      fail "encrypted root is not directly backed by internal NVMe"
+  else
+    [[ $source == /dev/nvme* ]] || fail "$role is not on internal NVMe"
+  fi
   [[ $filesystem == "$expected_type" ]] || fail "$role filesystem is not $expected_type"
   jq -n --arg source "$source" --arg type "$filesystem" '{source: $source, type: $type}'
 }
@@ -64,7 +81,9 @@ esp_mount=$(mount_record "$root/boot/efi" vfat ESP)
 # file, so the default is the kernel this checker has always expected.
 kernel_package=linux-asahi
 kernel_marker="$root/usr/share/omarchy/apple-silicon-kernel"
-if [[ -f $kernel_marker && ! -L $kernel_marker ]]; then
+if [[ $boot_profile == limine ]]; then
+  kernel_package=$(omarchy-mac-kernel) || fail "cannot identify the installed kernel"
+elif [[ -f $kernel_marker && ! -L $kernel_marker ]]; then
   kernel_package=$(<"$kernel_marker")
   kernel_package=${kernel_package//[[:space:]]/}
 fi
@@ -82,6 +101,16 @@ required_artifacts=(
   "boot/vmlinuz-$kernel_package"
   "boot/initramfs-$kernel_package.img"
 )
+if [[ $boot_profile == limine ]]; then
+  required_artifacts+=(boot/efi/limine.conf "boot/efi/EFI/Linux/omarchy_$kernel_package.efi")
+  [[ -f $root/var/lib/omarchy/limine.enabled && -f $root/etc/default/limine ]] ||
+    fail "Limine activation is incomplete"
+  # Reuse the runtime's read-only check for the installed kernel, actual EFI,
+  # menu, m1n1 composition, encryption state and retired temporary keyslots.
+  OMARCHY_BOOT_CHECK_ROOT="$root" OMARCHY_BOOT_CHECK_UNAME="$kernel_release" \
+    OMARCHY_BOOT_CHECK_ALLOW_PENDING_REBOOT=0 omarchy-apple-silicon-boot-check "$kernel_package" >&2 ||
+    fail "installed Limine boot contract failed"
+fi
 artifacts_json='{}'
 for relative in "${required_artifacts[@]}"; do
   path="$root/$relative"
@@ -113,6 +142,7 @@ done < <(lsblk -nr -o PARTTYPE)
 
 jq -n \
   --arg product_id omarchy-mx-mac \
+  --arg boot_profile "$boot_profile" \
   --arg model "$model" \
   --argjson compatible "$compatible_json" \
   --arg architecture "$architecture" \
@@ -149,4 +179,4 @@ jq -n \
       apfs_partitions_retained: true,
       macos_boot_verification_required: true
     }
-  }'
+  } | if $boot_profile == "limine" then . + {boot_profile: $boot_profile} else . end'

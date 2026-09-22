@@ -394,6 +394,10 @@
         {
           "path": "dependency-manifest.json.sig",
           "required": false
+        },
+        {
+          "path": "apple-boot-profile.json",
+          "required": false
         }
       ],
       "runtime_settings": [
@@ -449,7 +453,8 @@
         "configs/airootfs/usr/share/omarchy-iso/orchestrator/finalized_phases.py",
         "configs/airootfs/usr/share/omarchy-iso/orchestrator/target_packages.py",
         "configs/airootfs/usr/share/omarchy-iso/orchestrator/ui.py",
-        "configs/airootfs/usr/share/omarchy-iso/pacman-online-installed-quattro.conf"
+        "configs/airootfs/usr/share/omarchy-iso/pacman-online-installed-quattro.conf",
+        "configs/airootfs/usr/share/omarchy-iso/orchestrator/asahi_limine.py"
       ],
       "admission_paths": [
         "builder/asahi-checkpoint-admission.sh",
