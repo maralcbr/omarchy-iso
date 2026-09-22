@@ -13,3 +13,9 @@ This branch is a local source-preparation branch. No functional port or new buil
 The proposed runtime source ceiling is `maralcbr/omarchy-mx-mac` open PR #220 at `d418ab7f95e8ba447df4fb368ddd838a5ffc7943`, including merged #219 at `5e7a409fae1ddc17433d9408e15153b4fe813f7b`. The package/image reference is open `maralcbr/omarchy-pkgs` PR #194 at `68a61cef1aba768c6aae20a0feda2a42e19de6e8`. These heads were verified with GitHub API on September 22. Preserve pins and original attribution; neither open PR is a qualified downloadable candidate.
 
 Keep candidate packages/images private and signed under the existing build-input policy. Preserve the active desktop, unrelated dirty worktrees, installed-user feed and repository trust. No publication, remote update, physical disk operation or boot-policy change is part of this preparation.
+
+## Source checkpoint
+
+The signed candidate importer now verifies the explicit thirteen-package schema 4 as well as existing schemas 1–3. It checks the complete set, source provenance, signatures, payload ownership, ARM64 Limine template and conversion owner, and excludes the upstream repository key. Thirty-one offline importer tests passed with disposable signing keys.
+
+Image assembly deliberately refuses schema 4 immediately after authentication, before importing candidate trust or installing packages. This is a draft boundary: finalization, the disjoint dependency/platform closure, first-boot and factory-snapshot state, cache input declarations and authenticated VM lanes are not implemented yet. No new image has been built. The existing M3 baseline and schemas 1–3 retain their behavior. See the central runtime `docs/quattro-encryption-limine-source-port-2026-09-22.md` for exact scope and remaining qualification.
