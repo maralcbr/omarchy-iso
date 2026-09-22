@@ -70,3 +70,4 @@ test/unit/test_quattro_checkpoint_locks.py
 test/unit/quattro-finalized-profile-test.sh
 test/unit/test_asahi_limine.py
 test/unit/test_asahi_limine_contents.py
+test/unit/test_private_limine_qualification.py

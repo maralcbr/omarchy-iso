@@ -173,7 +173,14 @@ uefi_sha256=$(jq -er '.uefi_payload.sha256' "$product")
 [[ $package_filename == "${package_filename##*/}" && $package_filename == *.zip ]] ||
   fail "invalid product package filename"
 [[ $kernel_package =~ ^[a-z0-9][a-z0-9@._+-]+$ ]] || fail "invalid kernel package"
-[[ $boot_backend == asahi-grub ]] || fail "unsupported Apple Silicon boot backend"
+[[ $boot_backend == asahi-grub || $boot_backend == asahi-limine ]] || fail "unsupported Apple Silicon boot backend"
+if [[ $boot_backend == asahi-limine ]]; then
+  [[ $build_mode == diagnostic && $product == /builder/products/omarchy-mx-mac-limine-private.json ]] ||
+    fail "Limine assembly is restricted to the private diagnostic product"
+  python3 /builder/private-limine-qualification.py "$product" \
+    "$OMARCHY_CANDIDATE_ROOT/manifest.json" "$OMARCHY_DEPENDENCY_ROOT/manifest.json" \
+    /builder/quattro-trust/policy.json || fail "private Limine input contract differs"
+fi
 for size in "$esp_size" "$boot_size" "$root_size"; do
   [[ $size =~ ^[0-9]+$ ]] && (( size > 0 && size % 4096 == 0 )) ||
     fail "image sizes must be positive multiples of 4096"

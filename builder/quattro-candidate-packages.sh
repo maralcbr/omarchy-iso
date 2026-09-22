@@ -2,6 +2,17 @@
 
 # Only used in the disposable Apple image builder. No installed keyring or
 # online repository configuration is changed by this adapter.
+admit_private_limine_qualification() {
+  if [[ ${OMARCHY_ASAHI_PRODUCT:-} != /builder/products/omarchy-mx-mac-limine-private.json ||
+    ${OMARCHY_BUILD_MODE:-} != "diagnostic" || -z ${OMARCHY_DEPENDENCY_ROOT:-} ]]; then
+    echo "Schema-4 Limine inputs verified, but image assembly is not enabled for this product. Use the explicitly pinned private diagnostic product." >&2
+    return 1
+  fi
+  python3 /builder/private-limine-qualification.py \
+    "$OMARCHY_ASAHI_PRODUCT" "$1/manifest.json" \
+    "$OMARCHY_DEPENDENCY_ROOT/manifest.json" /builder/quattro-trust/policy.json
+}
+
 preflight_quattro_candidate_packages() {
   [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]] || return 0
   [[ $OMARCHY_BUILD_MODE == "diagnostic" &&
@@ -14,7 +25,9 @@ preflight_quattro_candidate_packages() {
     --source-revision "$OMARCHY_CANDIDATE_SOURCE" || return 1
   OMARCHY_CANDIDATE_SCHEMA=$(jq -er '.schema' "$verified/manifest.json") || return 1
   if [[ $OMARCHY_CANDIDATE_SCHEMA == 4 ]]; then
-    echo "Schema-4 Limine inputs verified, but image assembly is not enabled: the coordinated signed package set, new U-Boot branding and complete image/boot qualification are still required." >&2
+    admit_private_limine_qualification "$verified" || return 1
+  elif [[ ${OMARCHY_ASAHI_PRODUCT:-} == /builder/products/omarchy-mx-mac-limine-private.json ]]; then
+    echo "Private Limine qualification requires candidate schema 4." >&2
     return 1
   fi
 }
@@ -25,7 +38,9 @@ prepare_quattro_candidate_packages() {
   # initialize_verified_package_cache_stage authenticated these inputs before
   # any builder trust or dependency preparation. Never accept an unverified root.
   [[ -f $verified/manifest.json ]] || return 1
-  [[ $(jq -er '.schema' "$verified/manifest.json") != 4 ]] || return 1
+  if [[ $(jq -er '.schema' "$verified/manifest.json") == 4 ]]; then
+    admit_private_limine_qualification "$verified" || return 1
+  fi
   local primary filename
   primary=$(jq -er '.primary_fingerprint' /builder/quattro-trust/policy.json)
   pacman-key --add /builder/quattro-trust/public.gpg

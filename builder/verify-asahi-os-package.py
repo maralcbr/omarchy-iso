@@ -70,8 +70,14 @@ def load_product(path: Path) -> dict:
             raise PackageVerificationError(f"invalid product {key}")
     if VOLUME_ID_PATTERN.fullmatch(product["esp_volume_id"]) is None:
         raise PackageVerificationError("invalid ESP volume identifier")
-    if product["boot_backend"] != "asahi-grub":
+    if product["boot_backend"] not in {"asahi-grub", "asahi-limine"}:
         raise PackageVerificationError("unsupported Apple Silicon boot backend")
+    if product["boot_backend"] == "asahi-limine":
+        private = product.get("private_qualification", {})
+        if (private.get("candidate_schema") != 4 or private.get("dependency_schema") != 2
+                or private.get("publication") != "none"
+                or DIGEST_PATTERN.fullmatch(private.get("limine_efi_sha256", "")) is None):
+            raise PackageVerificationError("invalid private Limine product contract")
     branding = product["branding"]
     if not isinstance(branding, dict) or set(branding) != {
         "m1n1_boot_sha256",
@@ -294,6 +300,15 @@ def verify(package_path: Path, product_path: Path) -> dict:
             ):
                 raise PackageVerificationError("root image is not btrfs")
             machine = pe_machine(captured["esp/EFI/BOOT/BOOTAA64.EFI"])
+            if product["boot_backend"] == "asahi-limine":
+                if image_digests["esp/EFI/BOOT/BOOTAA64.EFI"] != product["private_qualification"]["limine_efi_sha256"]:
+                    raise PackageVerificationError("Limine EFI digest does not match product")
+                if "esp/limine.conf" not in members or not any(
+                    name.startswith("esp/EFI/Linux/") and name.endswith(".efi") for name in members
+                ):
+                    raise PackageVerificationError("Limine menu or UKI is missing")
+                if any(name.startswith("esp/omarchy/") for name in members):
+                    raise PackageVerificationError("Limine fresh-image staging is not empty")
     except (OSError, zipfile.BadZipFile) as error:
         raise PackageVerificationError("invalid package ZIP") from error
 

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "product_id": "omarchy-mx-mac",
+  "name": "Omarchy MX Mac (private Limine qualification)",
+  "default_os_name": "Omarchy",
+  "package_filename": "omarchy-2026.09.22-aarch64-apple-silicon-limine-private-os-package.zip",
+  "esp_size_bytes": 524288000,
+  "esp_volume_id": "0x4f4d5801",
+  "boot_size_bytes": 2147483648,
+  "boot_filesystem_uuid": "4f4d5801-424f-4f54-8000-000000000001",
+  "root_size_bytes": 34359738368,
+  "root_filesystem_uuid": "4f4d5801-524f-4f54-8000-000000000001",
+  "boot_backend": "asahi-limine",
+  "branding": {
+    "m1n1_boot_sha256": "d4d6a9866e56d1ed087e7a727c431a2f7c56b53470c644389a7cc8c0c5a5afc2",
+    "volume_icon_member": "omarchy-volume.icns",
+    "volume_icon_sha256": "cf26ed5d2831db99c00d62ca046040e01a18e08e63363d629340d04ac6ec8c23",
+    "volume_icon_size_bytes": 42899
+  },
+  "kernel_package": "linux-asahi",
+  "supported_fw": [
+    "13.5",
+    "14.8.3"
+  ],
+  "uefi_payload": {
+    "filename": "uefi-only-20260810-asahi-7.1.6-1.zip",
+    "url": "https://cdn.asahilinux.org/os/uefi-only-20260810-asahi-7.1.6-1.zip",
+    "size_bytes": 1005310,
+    "sha256": "80e3826665ba92380c32fbab3a0f8e4b5e738941d4baecb7a3d91b1894e4f699"
+  },
+  "private_qualification": {
+    "candidate_schema": 4,
+    "dependency_schema": 2,
+    "publication": "none",
+    "source_revision": "e82fe3c8850b184dfa22eefd571646ad85446122",
+    "signing_policy_sha256": "026e8abbe26cc1e36d1c19d804a2c5cde782b6de30f749ac30a0ad8d4ee6327d",
+    "uboot_filename": "uboot-asahi-2026.07.asahi2-3.202609220002-aarch64.pkg.tar.zst",
+    "uboot_sha256": "7c018e04d91a00e04d5d75a89df659d6f6aab85a100644512947c05d330a6414",
+    "limine_efi_sha256": "7a80f1e6a274db258425fdad79604e3e92736e84df45de2a75447cf3d96814ea"
+  }
+}

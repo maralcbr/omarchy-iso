@@ -171,14 +171,14 @@ while [[ $# -gt 0 ]]; do
     ;;
   *)
     echo "Unknown option: $1"
-    echo "Usage: $0 [--arch x86_64|aarch64] [--target x86_64/pc|aarch64/generic|aarch64/apple-silicon] [--artifact iso|asahi-os-package] [--product omarchy-mx-mac|omarchy-mx-mac-aurora] [--mode qualification|diagnostic] [--checkpoint-policy read-write|write-only] [--require-cache-hit-through configured-target] [--apple-media-validation-build] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>] [--candidate-packages DIRECTORY SIGNING_JSON_SHA256 SOURCE_COMMIT] [--candidate-dependencies DIRECTORY MANIFEST_SHA256] [--candidate-package-check]"
+    echo "Usage: $0 [--arch x86_64|aarch64] [--target x86_64/pc|aarch64/generic|aarch64/apple-silicon] [--artifact iso|asahi-os-package] [--product omarchy-mx-mac|omarchy-mx-mac-aurora|omarchy-mx-mac-limine-private] [--mode qualification|diagnostic] [--checkpoint-policy read-write|write-only] [--require-cache-hit-through configured-target] [--apple-media-validation-build] [--no-cache] [--keep-pkg-cache] [--no-boot-offer] [--debug] [--edge] [--dev|--rc] [--local-source <omarchy-checkout> <pkgs-checkout>] [--candidate-packages DIRECTORY SIGNING_JSON_SHA256 SOURCE_COMMIT] [--candidate-dependencies DIRECTORY MANIFEST_SHA256] [--candidate-package-check]"
     exit 1
     ;;
   esac
 done
 
 case "${OMARCHY_ASAHI_PRODUCT_NAME:-omarchy-mx-mac}" in
-  omarchy-mx-mac|omarchy-mx-mac-aurora) ;;
+  omarchy-mx-mac|omarchy-mx-mac-aurora|omarchy-mx-mac-limine-private) ;;
   *)
     echo "Unsupported product: $OMARCHY_ASAHI_PRODUCT_NAME" >&2
     exit 1
@@ -265,7 +265,7 @@ if (( CANDIDATE_PACKAGE_CHECK )) && [[ -z $CANDIDATE_INPUT ]]; then
 fi
 if [[ -n $CANDIDATE_INPUT ]]; then
   if (( ! asahi_full_os_package )) || [[ $OMARCHY_BUILD_MODE != "diagnostic" ||
-    -n $LOCAL_OMARCHY_PATH || ${OMARCHY_ASAHI_PRODUCT_NAME:-omarchy-mx-mac} != "omarchy-mx-mac" ]]; then
+    -n $LOCAL_OMARCHY_PATH || ${OMARCHY_ASAHI_PRODUCT_NAME:-omarchy-mx-mac} == "omarchy-mx-mac-aurora" ]]; then
     echo "Candidate packages require the diagnostic Apple full-OS build, without local source or Aurora." >&2
     exit 1
   fi
@@ -273,6 +273,11 @@ if [[ -n $CANDIDATE_INPUT ]]; then
     echo "Candidate image builds require a nonnegative SOURCE_DATE_EPOCH." >&2
     exit 1
   fi
+fi
+if [[ ${OMARCHY_ASAHI_PRODUCT_NAME:-omarchy-mx-mac} == "omarchy-mx-mac-limine-private" ]] &&
+  [[ $OMARCHY_BUILD_MODE != "diagnostic" || -z $CANDIDATE_INPUT || -z $DEPENDENCY_INPUT ]]; then
+  echo "Private Limine qualification requires diagnostic mode and signed candidate/dependency inputs." >&2
+  exit 1
 fi
 if [[ -z $OMARCHY_CHECKPOINT_POLICY ]]; then
   if (( asahi_full_os_package )) && [[ $OMARCHY_BUILD_MODE == qualification ]]; then
@@ -936,6 +941,7 @@ if [[ -z "$NO_CACHE" ]]; then
   [[ $OMARCHY_MEDIA_TARGET != "aarch64/apple-silicon" ]] || cache_scope+="_apple_silicon"
   [[ -z $CANDIDATE_INPUT ]] || cache_scope+="_quattro_candidates"
   [[ -z $DEPENDENCY_INPUT ]] || cache_scope+="_dependencies"
+  [[ ${OMARCHY_ASAHI_PRODUCT_NAME:-omarchy-mx-mac} != "omarchy-mx-mac-limine-private" ]] || cache_scope+="_limine_private"
   cache_base=${ASAHI_CACHE_BASE:-${XDG_CACHE_HOME:-$HOME/.cache}/omarchy}
   OFFLINE_REPO_BUILD_CACHE_DIR="$cache_base/$cache_scope/airootfs/var/cache/omarchy"
   if (( asahi_full_os_package )); then

@@ -5,6 +5,8 @@
 branding_manifest=/builder/branding/branding-manifest.json
 [[ ${kernel_package:-linux-asahi} != linux-aurora ]] ||
   branding_manifest=/builder/branding/branding-manifest-aurora.json
+[[ ${boot_backend:-asahi-grub} != asahi-limine ]] ||
+  branding_manifest=/builder/branding/branding-manifest-limine-private.json
 
 run_finalized_boot_stage() {
   finalized_directory=$work/finalized-boot

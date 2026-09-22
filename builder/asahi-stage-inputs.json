@@ -3,7 +3,9 @@
   "common_producer_inputs": [
     "builder/asahi_stage_inputs.py",
     "builder/build-asahi-os-package.sh",
-    "builder/asahi-package-dispatch.sh"
+    "builder/asahi-package-dispatch.sh",
+    "builder/private-limine-qualification.py",
+    "builder/quattro-trust/policy.json"
   ],
   "common_admission_inputs": [
     "builder/asahi_checkpoint.py",
@@ -52,11 +54,11 @@
         "builder/asahi-stage-inputs.json",
         "builder/asahi-build-lock.json",
         "builder/products/omarchy-mx-mac.json",
+        "builder/products/omarchy-mx-mac-limine-private.json",
         "builder/products/omarchy-mx-mac-aurora.json",
         "configs/profiledef.sh",
         "builder/quattro-candidate.py",
         "builder/quattro-trust/public.gpg",
-        "builder/quattro-trust/policy.json",
         "builder/quattro-dependencies.py"
       ],
       "lock_paths": [
@@ -162,7 +164,6 @@
         "builder/quattro-candidate.py",
         "builder/quattro-candidate-packages.sh",
         "builder/quattro-trust/public.gpg",
-        "builder/quattro-trust/policy.json",
         "builder/quattro-dependencies.py",
         "builder/quattro-dependencies.sh",
         "builder/fetch-quattro-hyprland.sh",
@@ -183,6 +184,7 @@
         "builder/asahi-early-checkpoint-admission.sh",
         "builder/file-mode-adapter.sh",
         "builder/products/omarchy-mx-mac.json",
+        "builder/products/omarchy-mx-mac-limine-private.json",
         "builder/products/omarchy-mx-mac-aurora.json",
         "configs/profiledef.sh",
         "builder/quattro-package-install-check.sh",
@@ -265,6 +267,7 @@
         "builder/asahi-lifecycle-lease.py",
         "builder/asahi-release-publication.py",
         "builder/products/omarchy-mx-mac.json",
+        "builder/products/omarchy-mx-mac-limine-private.json",
         "builder/products/omarchy-mx-mac-aurora.json"
       ],
       "lock_paths": [
@@ -431,6 +434,7 @@
         "configs/airootfs/usr/share/omarchy-iso/pacman-online-installed-arm-aurora.conf",
         "builder/brand-apple-silicon-boot.py",
         "builder/branding/branding-manifest.json",
+        "builder/branding/branding-manifest-limine-private.json",
         "builder/branding/branding-manifest-aurora.json",
         "builder/branding/omarchy-logo.png",
         "builder/branding/bootlogo_48.bin",
@@ -478,6 +482,7 @@
       "source_paths": [
         "builder/asahi-stages/sealed-release-package.sh",
         "builder/branding/branding-manifest.json",
+        "builder/branding/branding-manifest-limine-private.json",
         "builder/branding/branding-manifest-aurora.json",
         "builder/branding/omarchy-volume.icns"
       ],
@@ -516,6 +521,7 @@
         "builder/verify-asahi-os-package.py",
         "builder/capture-asahi-os-package-contents.py",
         "builder/products/omarchy-mx-mac.json",
+        "builder/products/omarchy-mx-mac-limine-private.json",
         "builder/products/omarchy-mx-mac-aurora.json"
       ],
       "admission_paths": [
