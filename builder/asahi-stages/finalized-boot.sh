@@ -88,7 +88,13 @@ run_finalized_boot_stage() {
   python3 /builder/capture-asahi-os-package-contents.py \
     "$target" "$node_runtime_identity" "$kernel_package" \
     >"$finalized_directory/installed-contents.json"
+  local -a installed_verification_arguments=()
+  if [[ -n ${OMARCHY_DEPENDENCY_ROOT:-} ]]; then
+    arch-chroot "$target" NetworkManager --print-config >"$finalized_directory/networkmanager-effective.conf"
+    installed_verification_arguments=(--package-profile quattro --networkmanager-config "$finalized_directory/networkmanager-effective.conf")
+  fi
   python3 /builder/verify-asahi-installed-system.py \
+    "${installed_verification_arguments[@]}" \
     --root-tree "$target" --boot-tree "$target/boot" --kernel "$kernel_package" \
     >"$finalized_directory/installed-config-verification.json"
   mkdir -p "$finalized_directory/esp"

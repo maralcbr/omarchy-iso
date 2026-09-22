@@ -213,3 +213,44 @@ jq -e '
   .checks["boot-kernel-present"].result == "failed"
 ' "$work/aurora-as-asahi.json" >/dev/null
 echo "ok - the verifier checks whichever kernel the payload names"
+
+# The Quattro add-on owns vendor Wi-Fi configuration; inspect NM's effective
+# output and the selected package/feed contract, not the historical /etc leaf.
+fixture="$work/quattro"
+build_fixture "$fixture"
+sed -i 's/\[omarchy\]/[omarchy-aarch64]/' "$fixture/root/etc/pacman.conf"
+rm -r "$fixture/root/var/lib/pacman/local/asahi-desktop-meta-1.0-1"
+rm "$fixture/root/etc/NetworkManager/conf.d/wifi_backend.conf"
+for package in omarchy omarchy-settings omarchy-mac; do
+  mkdir -p "$fixture/root/var/lib/pacman/local/$package-1.0-1"
+done
+printf '[device]\nwifi.backend=iwd\n' >"$work/effective.conf"
+run_quattro_verifier() {
+  python3 "$VERIFIER" --root-tree "$fixture/root" --boot-tree "$fixture/boot" \
+    --package-profile quattro --networkmanager-config "$work/effective.conf" \
+    >"$work/quattro.json" 2>"$work/quattro.err"
+}
+run_quattro_verifier
+jq -e '.result == "passed"' "$work/quattro.json" >/dev/null
+echo 'ok - Quattro packages and effective vendor Wi-Fi configuration pass'
+printf '\n[device-conflict]\nmatch-device=interface-name:wlan0\nwifi.backend=wpa_supplicant\n' >>"$work/effective.conf"
+if run_quattro_verifier; then
+  echo 'not ok - conflicting effective Wi-Fi override passed' >&2
+  exit 1
+fi
+jq -e '.checks["network-wifi-backend-iwd"].result == "failed"' "$work/quattro.json" >/dev/null
+printf '[device]\nwifi.backend=iwd\n' >"$work/effective.conf"
+printf '\n[omarchy]\nServer = https://example.invalid/fork\n' >>"$fixture/root/etc/pacman.conf"
+if run_quattro_verifier; then
+  echo 'not ok - inherited runtime repository passed' >&2
+  exit 1
+fi
+jq -e '.checks["pacman-no-fork-runtime"].result == "failed"' "$work/quattro.json" >/dev/null
+sed -i '/^\[omarchy\]$/,$d' "$fixture/root/etc/pacman.conf"
+rm -r "$fixture/root/var/lib/pacman/local/omarchy-mac-1.0-1"
+if run_quattro_verifier; then
+  echo 'not ok - absent add-on passed' >&2
+  exit 1
+fi
+jq -e '.checks["packages-required-present"].result == "failed"' "$work/quattro.json" >/dev/null
+echo 'ok - Quattro verification rejects conflicting Wi-Fi, fork repos, and a missing add-on'

@@ -18,6 +18,7 @@ fails. Standard library only.
 from __future__ import annotations
 
 import argparse
+import configparser
 import json
 import re
 import sys
@@ -79,7 +80,7 @@ def parse_pacman_sections(text: str) -> dict[str, list[str]]:
     return sections
 
 
-def check_pacman(verification: Verification, root: Path) -> None:
+def check_pacman(verification: Verification, root: Path, profile: str = "original") -> None:
     config = root / "etc/pacman.conf"
     if not config.is_file():
         verification.record("pacman-conf-present", False, "/etc/pacman.conf is missing")
@@ -88,7 +89,10 @@ def check_pacman(verification: Verification, root: Path) -> None:
     text = config.read_text(errors="replace")
     sections = parse_pacman_sections(text)
 
-    missing = [name for name in REQUIRED_PACMAN_SECTIONS if name not in sections]
+    required = tuple("omarchy-aarch64" if name == "omarchy" and profile == "quattro" else name for name in REQUIRED_PACMAN_SECTIONS)
+    missing = [name for name in required if name not in sections]
+    if profile == "quattro":
+        verification.record("pacman-no-fork-runtime", not ({"omarchy", "omarchy-aurora"} & sections.keys()), "Quattro must not select the inherited fork runtime repositories")
     verification.record(
         "pacman-required-repositories",
         not missing,
@@ -125,7 +129,23 @@ def check_pacman(verification: Verification, root: Path) -> None:
     )
 
 
-def check_network(verification: Verification, root: Path) -> None:
+def check_network(verification: Verification, root: Path, effective_config: Path | None = None, profile: str = "original") -> None:
+    if profile == "quattro":
+        config = configparser.ConfigParser(interpolation=None, strict=False)
+        valid = False
+        try:
+            if effective_config is not None:
+                config.read_string(effective_config.read_text())
+                valid = config.get("device", "wifi.backend", fallback="") == "iwd"
+                valid = valid and all(
+                    config.get(section, "wifi.backend") == "iwd"
+                    for section in config.sections()
+                    if section.startswith("device") and config.has_option(section, "wifi.backend")
+                )
+        except (OSError, configparser.Error):
+            valid = False
+        verification.record("network-wifi-backend-iwd", valid, "effective NetworkManager configuration must select iwd without a conflicting device override")
+        return
     backend = root / "etc/NetworkManager/conf.d/wifi_backend.conf"
     content = backend.read_text(errors="replace") if backend.is_file() else ""
     verification.record(
@@ -200,9 +220,11 @@ def installed_package_names(root: Path) -> set[str]:
     return names
 
 
-def check_packages(verification: Verification, root: Path, kernel: str) -> None:
+def check_packages(verification: Verification, root: Path, kernel: str, profile: str = "original") -> None:
     installed = installed_package_names(root)
     required = (kernel, *REQUIRED_PACKAGES)
+    if profile == "quattro":
+        required = tuple(name for name in required if name != "asahi-desktop-meta") + ("omarchy", "omarchy-settings", "omarchy-mac")
     missing = [name for name in required if name not in installed]
     verification.record(
         "packages-required-present",
@@ -298,6 +320,8 @@ def main() -> int:
     parser.add_argument("--boot-tree", type=Path)
     parser.add_argument("--expected-root-uuid", default=EXPECTED_ROOT_UUID)
     parser.add_argument("--kernel", default="linux-asahi", choices=SUPPORTED_KERNELS)
+    parser.add_argument("--package-profile", choices=("original", "quattro"), default="original")
+    parser.add_argument("--networkmanager-config", type=Path, help="NetworkManager --print-config output from the target chroot")
     arguments = parser.parse_args()
 
     if not arguments.root_tree.is_dir():
@@ -308,10 +332,10 @@ def main() -> int:
         return 2
 
     verification = Verification()
-    check_pacman(verification, arguments.root_tree)
-    check_network(verification, arguments.root_tree)
+    check_pacman(verification, arguments.root_tree, arguments.package_profile)
+    check_network(verification, arguments.root_tree, arguments.networkmanager_config, arguments.package_profile)
     check_enabled_units(verification, arguments.root_tree)
-    check_packages(verification, arguments.root_tree, arguments.kernel)
+    check_packages(verification, arguments.root_tree, arguments.kernel, arguments.package_profile)
     check_identity(verification, arguments.root_tree)
     if arguments.boot_tree is not None:
         check_boot(
