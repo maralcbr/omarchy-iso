@@ -143,14 +143,17 @@ filter_target_packages() {
         esac
       fi
       case "$line" in
-        amd-ucode|intel-ucode|limine-mkinitcpio-hook|limine-snapper-sync|sof-firmware)
+        amd-ucode|intel-ucode|sof-firmware)
           continue
+          ;;
+        limine-mkinitcpio-hook|limine-snapper-sync)
+          [[ ${OMARCHY_CANDIDATE_SCHEMA:-3} == 4 ]] || continue
           ;;
         snapper)
           [[ -n ${OMARCHY_CANDIDATE_ROOT:-} ]] || continue
           ;;
         limine)
-          line=grub
+          [[ ${OMARCHY_CANDIDATE_SCHEMA:-3} == 4 ]] || line=grub
           ;;
         linux|linux-asahi|linux-aurora)
           line=${ASAHI_KERNEL_PACKAGE:-linux-asahi}

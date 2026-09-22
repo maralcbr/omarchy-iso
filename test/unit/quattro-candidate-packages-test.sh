@@ -54,3 +54,9 @@ grep -q 'Candidate image builds require a nonnegative SOURCE_DATE_EPOCH' "$work/
   export OMARCHY_DEPENDENCY_ROOT=$work/dependencies
   [[ $(printf '%s\n' mise-bin dotnet-runtime omarchy-mac | filter_target_packages) == $'mise-bin\ndotnet-runtime-bin\nomarchy-mac' ]]
 )
+
+(
+  export OMARCHY_CANDIDATE_SCHEMA=4
+  [[ $(printf '%s\n' limine limine-mkinitcpio-hook limine-snapper-sync grub | filter_target_packages) == $'limine\nlimine-mkinitcpio-hook\nlimine-snapper-sync\ngrub' ]]
+)
+[[ $(printf '%s\n' limine limine-mkinitcpio-hook limine-snapper-sync | filter_target_packages) == grub ]]

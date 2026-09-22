@@ -88,6 +88,9 @@ checkpoint_verified_package_cache() {
       --snapshot-lock dependency-origin="$OMARCHY_DEPENDENCY_ROOT/origin.db"
       --snapshot-lock hyprland-repair=/builder/quattro-hyprland-repair.json
     )
+    if [[ ${OMARCHY_CANDIDATE_SCHEMA:-3} == 4 ]]; then
+      repository_locks+=(--snapshot-lock limine=/builder/quattro-limine.json)
+    fi
   else
     repository_locks=(
       --snapshot-lock arm-snapshot=/builder/arm-package-snapshots.conf

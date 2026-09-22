@@ -497,7 +497,8 @@ if [[ $OMARCHY_MEDIA_TARGET == aarch64/apple-silicon &&
   if [[ -n $DEPENDENCY_INPUT ]]; then
     python3 "$BUILD_ROOT/builder/quattro-dependencies.py" \
       --input "$DEPENDENCY_INPUT" --output "$HOST_BUILD_STATE/dependency-packages" \
-      --manifest-sha256 "$OMARCHY_DEPENDENCY_SHA256"
+      --manifest-sha256 "$OMARCHY_DEPENDENCY_SHA256" \
+      --candidate-schema "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["schema"])' "$HOST_BUILD_STATE/candidate-packages/manifest.json")"
   fi
   ASAHI_STAGE_INPUT_ROOT=$HOST_BUILD_STATE/stage-inputs
   python3 "$BUILD_ROOT/builder/asahi_stage_inputs.py" generate \

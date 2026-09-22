@@ -67,8 +67,8 @@ class DependencyTest(unittest.TestCase):
         p=self.input/'manifest.json';p.write_text(json.dumps(self.data));self.sign(p)
         self.checksum=d.c.digest(p)
 
-    def verify(self):
-        return d.snapshot(self.input,self.root/'output',self.checksum,self.keys.trust)
+    def verify(self, candidate_schema=3):
+        return d.snapshot(self.input,self.root/'output',self.checksum,self.keys.trust, candidate_schema=candidate_schema)
 
     def test_authenticated_snapshot_is_immutable(self):
         self.assertEqual(self.verify(),self.data)
@@ -99,6 +99,86 @@ class DependencyTest(unittest.TestCase):
         self.checksum=d.c.digest(self.input/'manifest.json')
         (self.input/'extra').write_text('unselected')
         with self.assertRaisesRegex(ValueError,'file inventory'):self.verify()
+
+    def use_limine(self):
+        self.data.update(schema=2, boot_profile='limine', candidate_schema=4,
+                         excluded_names=sorted(d.LIMINE_EXCLUDED))
+        self.sign_manifest()
+
+    def test_limine_snapshot_requires_explicit_matching_candidate(self):
+        self.use_limine()
+        with self.assertRaisesRegex(ValueError, 'legacy dependency contract'):
+            self.verify()
+        shutil.rmtree(self.root/'output')
+        self.assertEqual(self.verify(4), self.data)
+
+    def test_limine_candidate_rejects_legacy_dependencies(self):
+        with self.assertRaisesRegex(ValueError, 'Limine dependency contract'):
+            self.verify(4)
+
+    def test_limine_contract_requires_complete_exact_exclusions(self):
+        self.use_limine()
+        self.data['excluded_names'].remove('omarchy-first-boot')
+        self.sign_manifest()
+        with self.assertRaisesRegex(ValueError, 'wrong dependency contract'):
+            self.verify(4)
+
+    def test_signed_limine_snapshot_rejects_legacy_boot_payload(self):
+        self.use_limine()
+        self.data['packages'][0]['name'] = 'omarchy-apple-boot'
+        self.sign_manifest()
+        with self.assertRaisesRegex(ValueError, 'wrong dependency package set'):
+            self.verify(4)
+
+
+class CompositionTest(unittest.TestCase):
+    def setUp(self):
+        self.deps = dict(schema=2, kind='omarchy-image-dependencies', publication='none',
+            source_repository='omarchy-mac/omarchy-pkgs-aarch64', source_lane='edge',
+            boot_profile='limine', candidate_schema=4, excluded_names=sorted(d.LIMINE_EXCLUDED),
+            packages=[dict(name='omarchy-nvim')])
+        self.candidate = dict(schema=4, packages=[dict(name=name) for name in d.c.package_names(4)])
+        self.platform = dict(packages=[dict(name=name, filename=name+'.pkg.tar.xz')
+                                     for name in ('linux-asahi', 'uboot-asahi')])
+        self.overlays = [dict(name='hyprland'), dict(name='limine')]
+
+    def select(self):
+        return d.platform_selection(self.deps, self.candidate, self.platform, self.overlays)
+
+    def test_limine_replaces_only_platform_uboot(self):
+        self.assertEqual(self.select(), ['linux-asahi.pkg.tar.xz'])
+
+    def test_default_retains_pinned_uboot(self):
+        self.candidate = dict(schema=3, packages=[dict(name=name) for name in d.c.package_names(3)])
+        self.deps.update(schema=1, excluded_names=sorted(d.EXCLUDED))
+        del self.deps['boot_profile']; del self.deps['candidate_schema']
+        self.overlays.pop()
+        self.assertEqual(self.select(), ['linux-asahi.pkg.tar.xz', 'uboot-asahi.pkg.tar.xz'])
+
+    def test_candidate_dependency_overlap_is_rejected(self):
+        self.deps['packages'].append(dict(name='uboot-asahi'))
+        with self.assertRaisesRegex(ValueError, 'excluded dependency'):
+            self.select()
+
+    def test_dependency_platform_overlap_is_rejected(self):
+        self.deps['packages'].append(dict(name='linux-asahi'))
+        with self.assertRaisesRegex(ValueError, 'dependency and platform'):
+            self.select()
+
+    def test_candidate_platform_overlap_is_rejected(self):
+        self.platform['packages'].append(dict(name='omarchy-mac-boot'))
+        with self.assertRaisesRegex(ValueError, 'candidate and platform'):
+            self.select()
+
+    def test_overlay_overlap_is_rejected(self):
+        self.deps['packages'].append(dict(name='limine'))
+        with self.assertRaisesRegex(ValueError, 'overlay packages overlap'):
+            self.select()
+
+    def test_duplicate_platform_entry_is_rejected(self):
+        self.platform['packages'].append(self.platform['packages'][0])
+        with self.assertRaisesRegex(ValueError, 'duplicate package'):
+            self.select()
 
 
 if __name__=='__main__':unittest.main()

@@ -124,7 +124,8 @@
         "builder/quattro-candidate-packages.sh",
         "builder/quattro-dependencies.py",
         "builder/quattro-dependencies.sh",
-        "builder/fetch-quattro-hyprland.sh"
+        "builder/fetch-quattro-hyprland.sh",
+        "builder/fetch-quattro-limine.sh"
       ],
       "control_entrypoints": [
         "bin/omarchy-iso-make",
@@ -165,7 +166,9 @@
         "builder/quattro-dependencies.py",
         "builder/quattro-dependencies.sh",
         "builder/fetch-quattro-hyprland.sh",
-        "builder/quattro-hyprland-repair.json"
+        "builder/quattro-hyprland-repair.json",
+        "builder/fetch-quattro-limine.sh",
+        "builder/quattro-limine.json"
       ],
       "admission_paths": [
         "bin/omarchy-iso-make",

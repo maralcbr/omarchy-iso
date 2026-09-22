@@ -12,9 +12,50 @@ spec = importlib.util.spec_from_file_location('candidate', Path(__file__).with_n
 c = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(c)
 EXCLUDED = c.NAMES | c.VIDEO_NAMES
+LIMINE_EXCLUDED = c.package_names(4) | {'omarchy-apple-boot', 'omarchy-first-boot'}
 
 
-def snapshot(root, destination, manifest_hash, trust=c.TRUST):
+def dependency_contract(data, candidate_schema):
+    c.package_names(candidate_schema)
+    if candidate_schema == 4:
+        c.require(data['schema'] == 2 and data.get('boot_profile') == 'limine'
+                  and data.get('candidate_schema') == 4, 'wrong Limine dependency contract')
+        excluded = LIMINE_EXCLUDED
+    else:
+        c.require(data['schema'] == 1 and 'boot_profile' not in data
+                  and 'candidate_schema' not in data, 'wrong legacy dependency contract')
+        excluded = EXCLUDED
+    c.require(data['kind'] == 'omarchy-image-dependencies' and data['publication'] == 'none'
+              and data['source_repository'] == 'omarchy-mac/omarchy-pkgs-aarch64'
+              and data['source_lane'] == 'edge' and data['excluded_names'] == sorted(excluded),
+              'wrong dependency contract')
+    return excluded
+
+
+def platform_selection(dependencies, candidate, platform, overlays=()):
+    """Select the pinned platform without hiding an accidental repository overlap."""
+    excluded = dependency_contract(dependencies, candidate['schema'])
+    for data in (dependencies, candidate, platform):
+        c.require(len({p['name'] for p in data['packages']}) == len(data['packages']), 'duplicate package name')
+    names = [{p['name'] for p in data['packages']} for data in (dependencies, candidate, platform)]
+    dependency_names, candidate_names, platform_names = names
+    c.require(candidate_names == c.package_names(candidate['schema']), 'wrong candidate package set')
+    c.require(not dependency_names & excluded, 'excluded dependency package')
+    c.require(not dependency_names & candidate_names, 'candidate and dependency packages overlap')
+    replacement = {'uboot-asahi'} if candidate['schema'] == 4 else set()
+    c.require(candidate_names & platform_names == replacement, 'candidate and platform packages overlap')
+    selected = platform_names - replacement
+    if 'trust' in platform:
+        selected.add('asahi-alarm-keyring')
+    c.require(not dependency_names & selected, 'dependency and platform packages overlap')
+    overlay_names = {p['name'] for p in overlays}
+    c.require(len(overlay_names) == len(overlays), 'duplicate platform overlay')
+    c.require(not overlay_names & (dependency_names | candidate_names | selected), 'platform overlay packages overlap')
+    return [p['filename'] for p in platform['packages'] if p['name'] in selected]
+
+
+
+def snapshot(root, destination, manifest_hash, trust=c.TRUST, *, candidate_schema=3):
     c.require(re.fullmatch('[a-f0-9]{64}', manifest_hash), 'invalid dependency manifest hash')
     c.require(root.is_dir() and not root.is_symlink(), 'unsafe dependency root')
     policy = json.loads((trust / 'policy.json').read_text())
@@ -30,12 +71,10 @@ def snapshot(root, destination, manifest_hash, trust=c.TRUST):
         try:
             c.verify_signature(home, destination / 'manifest.json', policy)
             data = json.loads((destination / 'manifest.json').read_text())
-            c.require(data['schema'] == 1 and data['kind'] == 'omarchy-image-dependencies'
-                      and data['publication'] == 'none' and data['source_repository'] == 'omarchy-mac/omarchy-pkgs-aarch64'
-                      and data['source_lane'] == 'edge' and data['excluded_names'] == sorted(EXCLUDED), 'wrong dependency contract')
+            excluded = dependency_contract(data, candidate_schema)
             records = data['packages']
             names = [r['name'] for r in records]
-            c.require(len(names) == len(set(names)) and 'omarchy-nvim' in names and not EXCLUDED.intersection(names),
+            c.require(len(names) == len(set(names)) and 'omarchy-nvim' in names and not excluded.intersection(names),
                       'wrong dependency package set')
             files = [r['filename'] for r in records]
             c.require(len(files) == len(set(files)), 'duplicate archive filename')
@@ -62,7 +101,7 @@ def snapshot(root, destination, manifest_hash, trust=c.TRUST):
                 name = fields['%NAME%'][0]
                 c.require(name not in origin, 'duplicate origin package')
                 origin[name] = fields
-            c.require(set(names) == set(origin) - EXCLUDED, 'incomplete origin inventory')
+            c.require(set(names) == set(origin) - excluded, 'incomplete origin inventory')
             for record in records:
                 filename = record['filename']
                 c.require(re.fullmatch(r'[A-Za-z0-9+_.:-]+\.pkg\.tar\.(xz|zst)', filename), 'unsafe archive filename')
@@ -92,5 +131,18 @@ if __name__ == '__main__':
     p.add_argument('--input', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--manifest-sha256', required=True)
+    p.add_argument('--candidate-schema', type=int, choices=(1, 2, 3, 4), default=3)
+    p.add_argument('--candidate-manifest', type=Path)
+    p.add_argument('--platform-manifest', type=Path)
+    p.add_argument('--platform-overlay', type=Path, action='append', default=[])
+    p.add_argument('--selected-platform', type=Path)
     a = p.parse_args()
-    snapshot(a.input, a.output, a.manifest_sha256)
+    data = snapshot(a.input, a.output, a.manifest_sha256, candidate_schema=a.candidate_schema)
+    if any((a.candidate_manifest, a.platform_manifest, a.selected_platform, a.platform_overlay)):
+        c.require(all((a.candidate_manifest, a.platform_manifest, a.selected_platform)), 'incomplete platform selection arguments')
+        candidate = json.loads(a.candidate_manifest.read_text())
+        c.require(candidate['schema'] == a.candidate_schema, 'candidate schema differs')
+        files = platform_selection(data, candidate, json.loads(a.platform_manifest.read_text()),
+                                   [json.loads(path.read_text()) for path in a.platform_overlay])
+        a.selected_platform.write_text(''.join(name + '\n' for name in files))
+

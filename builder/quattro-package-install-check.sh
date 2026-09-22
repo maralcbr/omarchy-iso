@@ -7,7 +7,7 @@ run_quattro_package_install_check() {
   local target evidence started pacman_config
   local -a candidate_names
   mapfile -t candidate_names < <(jq -er '.packages[].name' "$OMARCHY_CANDIDATE_ROOT/manifest.json")
-  (( ${#candidate_names[@]} == 3 || ${#candidate_names[@]} == 5 || ${#candidate_names[@]} == 9 )) || return 1
+  (( ${#candidate_names[@]} == 3 || ${#candidate_names[@]} == 5 || ${#candidate_names[@]} == 9 || ${#candidate_names[@]} == 13 )) || return 1
   target=$(mktemp -d /var/tmp/quattro-package-root.XXXXXX)
   evidence=/out/build-evidence/$OMARCHY_BUILD_RUN_ID/package-install-check
   mkdir -p "$evidence"
@@ -54,6 +54,8 @@ for package in data['packages']:
     expected = data['package_repository_revision'] if name not in ('omarchy', 'omarchy-settings', 'omarchy-mac') else data['source_revision']
     if (target / revision).read_text().strip() != expected:
         raise SystemExit('Installed candidate source mismatch: ' + name)
+if data['schema'] == 4 and {'omarchy-apple-boot', 'omarchy-first-boot'} & installed.keys():
+    raise SystemExit('Legacy boot package installed alongside Limine candidate')
 if {'omarchy-dev', 'omarchy-settings-dev'} & installed.keys():
     raise SystemExit('Old desktop installed alongside candidate')
 (evidence / 'result.json').write_text(json.dumps({
