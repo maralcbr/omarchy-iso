@@ -12,6 +12,10 @@ prepare_quattro_candidate_packages() {
     --input "$OMARCHY_CANDIDATE_ROOT" --output "$verified" \
     --receipt-sha256 "$OMARCHY_CANDIDATE_RECEIPT_SHA256" \
     --source-revision "$OMARCHY_CANDIDATE_SOURCE"
+  if [[ $(jq -er '.schema' "$verified/manifest.json") == 4 ]]; then
+    echo "Schema-4 Limine inputs verified, but image assembly is not enabled: the dependency snapshot and finalized boot contract still require integration." >&2
+    return 1
+  fi
   local primary filename
   primary=$(jq -er '.primary_fingerprint' /builder/quattro-trust/policy.json)
   pacman-key --add /builder/quattro-trust/public.gpg

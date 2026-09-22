@@ -15,6 +15,26 @@ TRUST = Path(__file__).resolve().parent / 'quattro-trust'
 NAMES = {'omarchy', 'omarchy-settings', 'omarchy-mac'}
 VIDEO_NAMES = {'avd-fw', 'libva-v4l2_request-avd'}
 EXTRA_NAMES = {'asdcontrol', 'tobi-try', 'qemu-user-static', 'qemu-user-static-binfmt'}
+BOOT_NAMES = {'omarchy-mac-boot', 'limine-mkinitcpio-hook', 'limine-snapper-sync', 'uboot-asahi'}
+
+
+def package_names(schema):
+    require(schema in (1, 2, 3, 4), 'unsupported candidate schema')
+    return NAMES | (VIDEO_NAMES if schema >= 2 else set()) | (EXTRA_NAMES if schema >= 3 else set()) | (BOOT_NAMES if schema == 4 else set())
+
+
+def verify_boot_payloads(payloads):
+    owners = {}
+    for name, paths in payloads.items():
+        for path in paths:
+            require(path not in owners, 'candidate payload ownership conflict: ' + path)
+            owners[path] = name
+    require(owners.get('usr/share/omarchy/default/limine/limine.conf') == 'omarchy-settings',
+            'missing ARM64 Limine template')
+    require(owners.get('usr/lib/omarchy/initcpio/omarchy-mac-encrypt') == 'omarchy-mac-boot',
+            'missing boot conversion payload')
+    require(not any('omarchy-arm-repository.key' in p for p in owners), 'upstream repository key is excluded')
+
 
 
 def require(ok, message):
@@ -76,7 +96,7 @@ def snapshot(root, destination, receipt_hash, source, trust=TRUST):
             require(all(receipt[key] == policy[key] for key in ('primary_fingerprint', 'signing_subkey_fingerprint')),
                     'receipt signer mismatch')
             entries = receipt['files']
-            require(len(entries) in (6, 8, 12) and len({p['filename'] for p in entries}) == len(entries), 'unexpected signed inventory')
+            require(len(entries) in (6, 8, 12, 16) and len({p['filename'] for p in entries}) == len(entries), 'unexpected signed inventory')
             for entry in entries:
                 name = entry['filename']
                 copy_file(root, name, destination)
@@ -86,17 +106,18 @@ def snapshot(root, destination, receipt_hash, source, trust=TRUST):
             manifest = destination / 'manifest.json'
             require(digest(manifest) == receipt['input_manifest_sha256'], 'build manifest mismatch')
             data = json.loads(manifest.read_text())
-            require(data['schema'] in (1, 2, 3) and data['candidate_only'] is True and data['publication'] == 'none'
+            require(data['schema'] in (1, 2, 3, 4) and data['candidate_only'] is True and data['publication'] == 'none'
                     and data['signing'] == 'none' and data['source_repository'] == 'omacom/omarchy-mac'
                     and data['source_revision'] == source, 'wrong build manifest')
             packages = data['packages']
-            names = NAMES | VIDEO_NAMES | EXTRA_NAMES if data['schema'] == 3 else (NAMES | VIDEO_NAMES if data['schema'] == 2 else NAMES)
+            names = package_names(data['schema'])
             require(len(packages) == len(names) and {p['name'] for p in packages} == names, 'wrong package set')
             if data['schema'] >= 2:
                 require(re.fullmatch('[a-f0-9]{40}', data['package_repository_revision']), 'invalid recipe revision')
             expected = {'manifest.json', 'omarchy-base.packages', 'omarchy-apple.packages'} | {p['filename'] for p in packages}
             require({p['filename'] for p in entries} == expected, 'unexpected signed files')
             versions = {}
+            payloads = {}
             for package in packages:
                 name, filename = package['name'], package['filename']
                 require(re.fullmatch(r'[A-Za-z0-9+_.:-]+\.pkg\.tar\.(xz|zst)', filename), 'invalid archive name')
@@ -114,6 +135,10 @@ def snapshot(root, destination, receipt_hash, source, trust=TRUST):
                 expected_source = data['package_repository_revision'] if name not in NAMES else source
                 require(member(path, revision).decode().strip() == expected_source, 'mixed package sources')
                 versions[name] = package['version']
+                if data['schema'] == 4:
+                    paths = subprocess.check_output(['bsdtar', '-tf', str(path)], text=True).splitlines()
+                    payloads[name] = {p.removeprefix('./') for p in paths if not p.endswith('/') and not p.removeprefix('./').startswith('.')}
+
                 if name == 'omarchy':
                     for label in ('base', 'apple'):
                         filename = f'omarchy-{label}.packages'
@@ -121,6 +146,8 @@ def snapshot(root, destination, receipt_hash, source, trust=TRUST):
                                 'package manifest differs from archive')
                     require('omarchy-settings=' + package['version'].rsplit('-', 1)[0] in package['dependencies'],
                             'missing settings version pin')
+            if data['schema'] == 4:
+                verify_boot_payloads(payloads)
             require(versions['omarchy'] == versions['omarchy-settings'], 'mixed desktop versions')
             require('omarchy-mac' in (destination / 'omarchy-apple.packages').read_text().splitlines(), 'missing Apple add-on')
         finally:

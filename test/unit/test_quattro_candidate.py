@@ -42,7 +42,7 @@ class CandidateTest(unittest.TestCase):
         cls.bundle = cls.base / 'bundle'
         cls.bundle.mkdir()
         packages = []
-        for name in sorted(c.NAMES | c.VIDEO_NAMES | c.EXTRA_NAMES if cls.schema == 3 else (c.NAMES | c.VIDEO_NAMES if cls.schema == 2 else c.NAMES)):
+        for name in sorted(c.package_names(cls.schema)):
             deps = ['omarchy-settings=1.0'] if name == 'omarchy' else []
             content = {'.PKGINFO': '\n'.join([f'pkgname = {name}', 'pkgver = 1.0-1', 'arch = any' if name in ('avd-fw', 'tobi-try') else 'arch = aarch64', *['depend = ' + d for d in deps]])}
             revision = 'usr/share/omarchy-mac/source-revision' if name == 'omarchy-mac' else f'usr/share/doc/{name}/source-revision'
@@ -52,6 +52,10 @@ class CandidateTest(unittest.TestCase):
                     filename = f'omarchy-{label}.packages'
                     (cls.bundle / filename).write_text('omarchy-mac\n')
                     content['usr/share/omarchy/install/' + filename] = 'omarchy-mac\n'
+            if cls.schema == 4 and name == 'omarchy-settings':
+                content['usr/share/omarchy/default/limine/limine.conf'] = 'fixture menu'
+            if cls.schema == 4 and name == 'omarchy-mac-boot':
+                content['usr/lib/omarchy/initcpio/omarchy-mac-encrypt'] = 'fixture converter'
             filename = name + '-1.0-1-aarch64.pkg.tar.xz'
             with tarfile.open(cls.bundle / filename, 'w:xz') as archive:
                 for path, value in content.items():
@@ -90,7 +94,7 @@ class CandidateTest(unittest.TestCase):
                           kwargs.get('source', self.source), kwargs.get('trust', self.trust))
 
     def test_signed_set_creates_readonly_snapshot(self):
-        self.assertEqual(len(self.verify()['packages']), 9 if self.schema == 3 else (5 if self.schema == 2 else 3))
+        self.assertEqual(len(self.verify()['packages']), len(c.package_names(self.schema)))
         self.assertEqual((self.work / 'output').stat().st_mode & 0o777, 0o555)
 
     def test_tampered_archive(self):
@@ -166,6 +170,46 @@ class CompleteCandidateTest(VideoCandidateTest):
         checksum = self.resign_manifest(data)
         with self.assertRaisesRegex(ValueError, 'wrong package set'):
             self.verify(checksum=checksum)
+
+
+class BootCandidateTest(CompleteCandidateTest):
+    schema = 4
+
+    def test_image_assembly_stops_before_trust_changes(self):
+        script = ROOT / 'builder/quattro-candidate-packages.sh'
+        result = subprocess.run(['bash', '-c', r'''source "$1"
+python3() { return 0; }
+jq() { printf '4\n'; }
+pacman-key() { echo TRUST-CHANGED; return 99; }
+export OMARCHY_CANDIDATE_ROOT=fixture OMARCHY_CANDIDATE_RECEIPT_SHA256=fixture OMARCHY_CANDIDATE_SOURCE=fixture
+export OMARCHY_BUILD_MODE=diagnostic OMARCHY_MEDIA_TARGET=aarch64/apple-silicon OMARCHY_ARTIFACT_KIND=asahi-os-package
+prepare_quattro_candidate_packages
+''', 'fixture', str(script)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('image assembly is not enabled', result.stderr)
+        self.assertNotIn('TRUST-CHANGED', result.stdout)
+
+    def test_missing_boot_package(self):
+        data = json.loads((self.input / 'manifest.json').read_text())
+        data['packages'] = [p for p in data['packages'] if p['name'] != 'omarchy-mac-boot']
+        checksum = self.resign_manifest(data)
+        with self.assertRaisesRegex(ValueError, 'wrong package set'):
+            self.verify(checksum=checksum)
+
+    def test_boot_ownership_and_foreign_key_rejected(self):
+        paths = {'omarchy-settings': {'usr/share/omarchy/default/limine/limine.conf'},
+                 'omarchy-mac-boot': {'usr/lib/omarchy/initcpio/omarchy-mac-encrypt'}}
+        c.verify_boot_payloads(paths)
+        for owner, path, error in (
+            ('omarchy', 'usr/share/omarchy/default/limine/limine.conf', 'ownership conflict'),
+            ('omarchy-mac-boot', 'usr/lib/omarchy/mac-first-boot/omarchy-arm-repository.key', 'repository key'),
+        ):
+            changed = {name: set(files) for name, files in paths.items()}
+            changed.setdefault(owner, set()).add(path)
+            with self.assertRaisesRegex(ValueError, error):
+                c.verify_boot_payloads(changed)
+        with self.assertRaisesRegex(ValueError, 'Limine template'):
+            c.verify_boot_payloads({'omarchy-mac-boot': paths['omarchy-mac-boot']})
 
 
 if __name__ == '__main__':
