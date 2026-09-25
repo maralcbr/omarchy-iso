@@ -213,11 +213,12 @@ mapfile -t all_packages < <(
 # arch-mact2 replaced apple-bcm-firmware with apple-bcm-firmware-fetcher on
 # 2026-09-16. The fetcher conflicts with the old name and does not provide it,
 # so every runtime that still lists apple-bcm-firmware fails the whole offline
-# download with "target not found". Only T2 setup installs it, by name, so
-# leave it out of the mirror until the runtime's package lists and T2 setup move
-# to the fetcher; until then a T2 install from this ISO goes without it.
+# download with "target not found". Leaving it out of the mirror lets the ISO
+# build for machines that never install it, but T2 setup still asks for it by
+# name alongside linux-t2, so a T2 install from such an ISO fails until the
+# runtime's package lists and T2 setup move to the fetcher.
 mapfile -t all_packages < <(
-  printf '%s\n' "${all_packages[@]}" | grep -vx 'apple-bcm-firmware' || true
+  printf '%s\n' "${all_packages[@]}" | grep -Fxv 'apple-bcm-firmware' || true
 )
 
 # With --local-source we already built these omarchy* packages directly into
